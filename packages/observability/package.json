@@ -1,0 +1,12 @@
+{
+  "name": "@fanpage/observability",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "pino": "^10.1.0" }
+}

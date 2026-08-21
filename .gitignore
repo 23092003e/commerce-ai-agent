@@ -149,6 +149,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -202,6 +204,14 @@ cython_debug/
 # .vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+
+# Node.js / TypeScript
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
 
 # Ruff stuff:
 .ruff_cache/

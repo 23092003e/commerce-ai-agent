@@ -1,0 +1,20 @@
+{
+  "object": "page",
+  "entry": [
+    {
+      "id": "page-123",
+      "time": 1735689600000,
+      "messaging": [
+        {
+          "sender": { "id": "customer-456" },
+          "recipient": { "id": "page-123" },
+          "timestamp": 1735689600123,
+          "message": {
+            "mid": "message-001",
+            "text": "Mình muốn xem sản phẩm"
+          }
+        }
+      ]
+    }
+  ]
+}
