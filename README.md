@@ -1,6 +1,6 @@
 # Facebook Fanpage AI Sales Agent
 
-Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phase 0 and the testable Phase 1 skeleton only: secure Meta webhook ingress, durable event storage, Redis queueing, idempotent inbound-message persistence, and fake/Graph outbound text adapters. It deliberately contains no AI sales logic yet.
+Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–2: secure Meta webhook ingress, durable event storage, Redis queueing, ordered/idempotent inbound-message persistence, optimistic conversation updates, explicit AI/human control state, and fake/Graph outbound text adapters. It deliberately contains no AI sales logic yet.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ pnpm.cmd test:integration
 pnpm.cmd build
 ```
 
-`pnpm test:integration` expects healthy PostgreSQL and Redis services. It executes the signed fixture through Fastify, PostgreSQL, BullMQ, and the worker, then asserts the message is persisted exactly once.
+`pnpm test:integration` expects healthy PostgreSQL and Redis services. It executes signed fixtures through Fastify, PostgreSQL, BullMQ, and the worker, then verifies idempotent persistence, retry recovery, monotonic conversation timestamps, and optimistic-concurrency conflicts.
 
 ## Runtime flow
 
@@ -59,6 +59,7 @@ Meta webhook
   -> Zod payload validation
   -> durable webhook_events insert/dedupe
   -> BullMQ enqueue with deterministic job ID
+  -> timestamp-ordered claim per conversation
   -> worker normalization
   -> PostgreSQL advisory lock per Page/customer
   -> page/customer/open-conversation upsert
@@ -80,4 +81,4 @@ Migrations under `packages/db/migrations` are immutable. The migration runner re
 - `packages/config`: environment validation
 - `packages/observability`: structured/redacted logging
 
-The next milestone is Phase 2: harden ordered concurrent conversation processing and add explicit optimistic-concurrency behavior, without adding AI yet.
+The next milestone is Phase 3: add the structured catalog, variants, inventory, and typed product search without relying on AI-generated product facts.

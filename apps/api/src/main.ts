@@ -54,6 +54,9 @@ queueWorker.on('failed', (job, error) => {
     'Webhook worker job failed'
   );
 });
+queueWorker.on('error', (error) => {
+  logger.error({ error: error.message }, 'Webhook worker error');
+});
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutting down');

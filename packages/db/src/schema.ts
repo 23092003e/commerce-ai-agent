@@ -175,6 +175,7 @@ export const webhookEvents = pgTable(
     externalEventKey: text('external_event_key').notNull().unique(),
     pageId: uuid('page_id').references(() => pages.id),
     providerPageId: text('provider_page_id'),
+    conversationKey: text('conversation_key'),
     rawPayload: jsonb('raw_payload').notNull(),
     receivedAt: timestamp('received_at', { withTimezone: true })
       .notNull()
@@ -191,6 +192,11 @@ export const webhookEvents = pgTable(
     index('webhook_events_processing_state_idx').on(
       table.processingState,
       table.receivedAt
-    )
+    ),
+    index('webhook_events_conversation_order_idx')
+      .on(table.conversationKey, table.eventTimestamp, table.externalEventKey)
+      .where(
+        sql`${table.processingState} IN ('received', 'queued', 'processing')`
+      )
   ]
 );

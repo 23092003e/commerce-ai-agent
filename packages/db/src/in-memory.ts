@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type {
   CommerceRepository,
+  ConversationView,
   PersistInboundMessageInput,
   RepositorySnapshot,
   StoredWebhookEvent,
-  StoreWebhookEventInput
+  StoreWebhookEventInput,
+  UpdateConversationControlModeInput,
+  UpdateConversationControlModeResult,
+  WebhookEventClaimResult
 } from './types.js';
 
 export class InMemoryCommerceRepository implements CommerceRepository {
@@ -19,7 +23,7 @@ export class InMemoryCommerceRepository implements CommerceRepository {
   >();
   private readonly conversations = new Map<
     string,
-    { id: string; pageId: string; customerId: string; status: 'open' }
+    ConversationView & { status: 'open' }
   >();
   private readonly messages = new Map<
     string,
@@ -60,6 +64,37 @@ export class InMemoryCommerceRepository implements CommerceRepository {
     return event ? structuredClone(event) : null;
   }
 
+  async claimWebhookEventForProcessing(
+    eventKey: string
+  ): Promise<WebhookEventClaimResult> {
+    const event = this.events.get(eventKey);
+    if (!event) return { type: 'not_found' };
+    if (
+      event.processingState === 'processed' ||
+      event.processingState === 'ignored'
+    ) {
+      return { type: 'terminal' };
+    }
+
+    if (event.conversationKey) {
+      const hasEarlierPendingEvent = [...this.events.values()].some(
+        (candidate) =>
+          candidate.externalEventKey !== event.externalEventKey &&
+          candidate.conversationKey === event.conversationKey &&
+          ['received', 'queued', 'processing'].includes(
+            candidate.processingState
+          ) &&
+          (candidate.eventTimestamp < event.eventTimestamp ||
+            (candidate.eventTimestamp === event.eventTimestamp &&
+              candidate.externalEventKey < event.externalEventKey))
+      );
+      if (hasEarlierPendingEvent) return { type: 'deferred' };
+    }
+
+    event.processingState = 'processing';
+    return { type: 'claimed', event: structuredClone(event) };
+  }
+
   async persistInboundMessage(
     input: PersistInboundMessageInput
   ): Promise<boolean> {
@@ -90,7 +125,9 @@ export class InMemoryCommerceRepository implements CommerceRepository {
         id: randomUUID(),
         pageId: page.id,
         customerId: customer.id,
-        status: 'open'
+        status: 'open',
+        controlMode: 'ai',
+        version: 1
       };
       this.conversations.set(conversationKey, conversation);
     }
@@ -105,11 +142,40 @@ export class InMemoryCommerceRepository implements CommerceRepository {
         senderType: 'customer',
         text: input.text
       });
+      conversation.version += 1;
     }
 
     event.processingState = 'processed';
     event.attempts += 1;
     return inserted;
+  }
+
+  async findOpenConversationByIdentity(
+    metaPageId: string,
+    metaPsid: string
+  ): Promise<ConversationView | null> {
+    const page = this.pages.get(metaPageId);
+    if (!page) return null;
+    const customer = this.customers.get(`${page.id}:${metaPsid}`);
+    if (!customer) return null;
+    const conversation = this.conversations.get(`${page.id}:${customer.id}`);
+    return conversation ? structuredClone(conversation) : null;
+  }
+
+  async updateConversationControlMode(
+    input: UpdateConversationControlModeInput
+  ): Promise<UpdateConversationControlModeResult> {
+    const conversation = [...this.conversations.values()].find(
+      (candidate) => candidate.id === input.conversationId
+    );
+    if (!conversation) return { type: 'not_found' };
+    if (conversation.version !== input.expectedVersion) {
+      return { type: 'conflict', currentVersion: conversation.version };
+    }
+
+    conversation.controlMode = input.controlMode;
+    conversation.version += 1;
+    return { type: 'updated', conversation: structuredClone(conversation) };
   }
 
   async markWebhookEventIgnored(eventKey: string): Promise<void> {
@@ -122,7 +188,12 @@ export class InMemoryCommerceRepository implements CommerceRepository {
 
   async markWebhookEventFailed(eventKey: string): Promise<void> {
     const event = this.events.get(eventKey);
-    if (event && event.processingState !== 'processed') {
+    if (
+      event &&
+      event.processingState !== 'processed' &&
+      event.processingState !== 'ignored' &&
+      event.processingState !== 'failed'
+    ) {
       event.processingState = 'failed';
       event.attempts += 1;
     }

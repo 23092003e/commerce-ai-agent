@@ -4,6 +4,7 @@ import type { MetaWebhookPayload } from './webhook-schema.js';
 export interface MetaWebhookEventEnvelope {
   externalEventKey: string;
   metaPageId: string;
+  conversationKey: string;
   eventTimestamp: number;
   rawPayload: unknown;
 }
@@ -57,6 +58,7 @@ export function extractMetaWebhookEvents(
           ? `meta:message:${messageId}`
           : `meta:event:${fallback}`,
         metaPageId: entry.id,
+        conversationKey: `meta:${entry.id}:${event.sender.id}`,
         eventTimestamp: event.timestamp,
         rawPayload: { pageId: entry.id, event }
       };

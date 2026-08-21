@@ -15,6 +15,11 @@ export interface BullMqEventJobQueueOptions {
   connectTimeoutMs?: number;
 }
 
+export interface EventJobDetails {
+  state: string;
+  attemptsMade: number;
+}
+
 function jobIdFor(eventKey: string): string {
   return createHash('sha256').update(eventKey).digest('hex');
 }
@@ -83,6 +88,12 @@ export class BullMqEventJobQueue implements EventJobQueue {
     return job ? job.getState() : null;
   }
 
+  async getJobDetails(eventKey: string): Promise<EventJobDetails | null> {
+    const job = await this.queue.getJob(jobIdFor(eventKey));
+    if (!job) return null;
+    return { state: await job.getState(), attemptsMade: job.attemptsMade };
+  }
+
   async ping(): Promise<void> {
     await this.queue.waitUntilReady();
   }
@@ -93,4 +104,8 @@ export class BullMqEventJobQueue implements EventJobQueue {
   }
 }
 
-export { startBullMqEventWorker, type EventJobHandler } from './worker.js';
+export {
+  startBullMqEventWorker,
+  type EventJobHandler,
+  type EventJobResult
+} from './worker.js';
