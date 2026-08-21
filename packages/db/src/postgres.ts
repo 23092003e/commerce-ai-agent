@@ -98,7 +98,10 @@ export class PostgresCommerceRepository implements CommerceRepository {
       const messageTime = new Date(input.timestamp);
       const [page] = await tx
         .insert(schema.pages)
-        .values({ metaPageId: input.metaPageId, name: `Meta Page ${input.metaPageId}` })
+        .values({
+          metaPageId: input.metaPageId,
+          name: `Meta Page ${input.metaPageId}`
+        })
         .onConflictDoUpdate({
           target: schema.pages.metaPageId,
           set: { updatedAt: now }

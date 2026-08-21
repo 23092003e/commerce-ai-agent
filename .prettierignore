@@ -1,0 +1,6 @@
+FACEBOOK_FANPAGE_AI_SALES_AGENT_BUILD_SPEC.md
+.pnpm-store/
+node_modules/
+pnpm-lock.yaml
+dist/
+coverage/

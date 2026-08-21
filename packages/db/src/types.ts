@@ -1,10 +1,5 @@
 export type WebhookProcessingState =
-  | 'received'
-  | 'queued'
-  | 'processing'
-  | 'processed'
-  | 'failed'
-  | 'ignored';
+  'received' | 'queued' | 'processing' | 'processed' | 'failed' | 'ignored';
 
 export interface StoredWebhookEvent {
   externalEventKey: string;

@@ -8,6 +8,17 @@ export interface EventJobQueue {
   close(): Promise<void>;
 }
 
+export interface BullMqEventJobQueueOptions {
+  attempts?: number;
+  backoffDelayMs?: number;
+  commandTimeoutMs?: number;
+  connectTimeoutMs?: number;
+}
+
+function jobIdFor(eventKey: string): string {
+  return createHash('sha256').update(eventKey).digest('hex');
+}
+
 export class InMemoryEventJobQueue implements EventJobQueue {
   private readonly pending: string[] = [];
   private readonly pendingKeys = new Set<string>();
@@ -33,13 +44,20 @@ export class BullMqEventJobQueue implements EventJobQueue {
   private readonly connection: Redis;
   private readonly queue: Queue<{ eventKey: string }>;
 
-  constructor(redisUrl: string) {
-    this.connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  constructor(redisUrl: string, options: BullMqEventJobQueueOptions = {}) {
+    this.connection = new Redis(redisUrl, {
+      maxRetriesPerRequest: 2,
+      connectTimeout: options.connectTimeoutMs ?? 5_000,
+      commandTimeout: options.commandTimeoutMs ?? 5_000
+    });
     this.queue = new Queue('meta-webhook-events', {
       connection: this.connection,
       defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 1_000 },
+        attempts: options.attempts ?? 5,
+        backoff: {
+          type: 'exponential',
+          delay: options.backoffDelayMs ?? 1_000
+        },
         removeOnComplete: 1_000,
         removeOnFail: 5_000
       }
@@ -47,8 +65,22 @@ export class BullMqEventJobQueue implements EventJobQueue {
   }
 
   async enqueue(eventKey: string): Promise<void> {
-    const jobId = createHash('sha256').update(eventKey).digest('hex');
+    const jobId = jobIdFor(eventKey);
+    const existing = await this.queue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'failed') {
+        await existing.remove();
+      } else {
+        return;
+      }
+    }
     await this.queue.add('process-meta-event', { eventKey }, { jobId });
+  }
+
+  async getJobState(eventKey: string): Promise<string | null> {
+    const job = await this.queue.getJob(jobIdFor(eventKey));
+    return job ? job.getState() : null;
   }
 
   async ping(): Promise<void> {
@@ -61,7 +93,4 @@ export class BullMqEventJobQueue implements EventJobQueue {
   }
 }
 
-export {
-  startBullMqEventWorker,
-  type EventJobHandler
-} from './worker.js';
+export { startBullMqEventWorker, type EventJobHandler } from './worker.js';

@@ -24,7 +24,10 @@ export async function runMigrations(
       .sort();
 
     for (const filename of filenames) {
-      const migration = await readFile(join(migrationsDirectory, filename), 'utf8');
+      const migration = await readFile(
+        join(migrationsDirectory, filename),
+        'utf8'
+      );
       const checksum = createHash('sha256').update(migration).digest('hex');
       const existing = await client.query<{ checksum: string }>(
         'SELECT checksum FROM schema_migrations WHERE filename = $1',

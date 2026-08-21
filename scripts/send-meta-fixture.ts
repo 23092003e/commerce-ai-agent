@@ -22,5 +22,5 @@ const response = await fetch(`${baseUrl}/webhooks/meta`, {
   signal: AbortSignal.timeout(10_000)
 });
 
-process.stdout.write(`${response.status} ${await response.text()}\n`);
+process.stdout.write(`${String(response.status)} ${await response.text()}\n`);
 if (!response.ok) process.exitCode = 1;

@@ -44,10 +44,7 @@ function sign(payload: string): string {
     .digest('hex')}`;
 }
 
-async function postFixture(
-  app: ReturnType<typeof buildApp>,
-  payload: string
-) {
+async function postFixture(app: ReturnType<typeof buildApp>, payload: string) {
   return app.inject({
     method: 'POST',
     url: '/webhooks/meta',
@@ -64,9 +61,9 @@ async function processNext(
   worker: InboundMessageWorker
 ) {
   const eventKey = queue.take();
-  expect(eventKey).toBeDefined();
-  await worker.process(eventKey!);
-  return eventKey!;
+  if (!eventKey) throw new Error('Expected an enqueued event');
+  await worker.process(eventKey);
+  return eventKey;
 }
 
 describe('Meta webhook ingestion pipeline', () => {

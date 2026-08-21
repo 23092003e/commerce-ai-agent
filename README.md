@@ -37,6 +37,8 @@ pnpm.cmd fixture:send
 
 The fixture sender signs the exact raw JSON bytes with the local app secret. Change its Meta message ID before re-sending if you want a new event; identical IDs are intentionally deduplicated.
 
+In non-production fake-adapter mode, `POST /internal/test/meta/outbound` sends through the fake channel and `GET /internal/test/meta/outbound` returns its in-process captures. These test-only routes are not registered in production or Graph-adapter mode.
+
 ## Quality commands
 
 ```powershell

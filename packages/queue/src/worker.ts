@@ -9,7 +9,10 @@ export function startBullMqEventWorker(
   redisUrl: string,
   handler: EventJobHandler
 ): Worker<{ eventKey: string }> {
-  const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  const connection = new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    connectTimeout: 5_000
+  });
   const worker = new Worker<{ eventKey: string }>(
     'meta-webhook-events',
     async (job) => handler.process(job.data.eventKey),

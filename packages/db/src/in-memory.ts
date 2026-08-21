@@ -9,7 +9,10 @@ import type {
 
 export class InMemoryCommerceRepository implements CommerceRepository {
   private readonly events = new Map<string, StoredWebhookEvent>();
-  private readonly pages = new Map<string, { id: string; metaPageId: string }>();
+  private readonly pages = new Map<
+    string,
+    { id: string; metaPageId: string }
+  >();
   private readonly customers = new Map<
     string,
     { id: string; pageId: string; metaPsid: string }

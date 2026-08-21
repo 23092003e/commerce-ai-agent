@@ -19,5 +19,7 @@ export function verifyMetaSignature(
   const expected = createHmac('sha256', appSecret).update(rawBody).digest();
   const supplied = Buffer.from(suppliedHex, 'hex');
 
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  return (
+    supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  );
 }

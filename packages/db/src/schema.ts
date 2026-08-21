@@ -72,8 +72,12 @@ export const pages = pgTable('pages', {
   timezone: text().notNull().default('UTC'),
   defaultLocale: text('default_locale').notNull().default('vi_VN'),
   aiEnabled: boolean('ai_enabled').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
 });
 
 export const customers = pgTable(
@@ -110,7 +114,9 @@ export const conversations = pgTable(
       .notNull()
       .references(() => customers.id),
     status: conversationStatus().notNull().default('open'),
-    controlMode: conversationControlMode('control_mode').notNull().default('ai'),
+    controlMode: conversationControlMode('control_mode')
+      .notNull()
+      .default('ai'),
     checkoutState: checkoutState('checkout_state').notNull().default('none'),
     activeCartId: uuid('active_cart_id'),
     currentProductRefs: jsonb('current_product_refs').notNull().default([]),

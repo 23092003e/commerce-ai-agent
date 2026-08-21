@@ -2,9 +2,11 @@ import { loadConfig } from '@fanpage/config';
 import { PostgresCommerceRepository } from '@fanpage/db';
 import { createLogger } from '@fanpage/observability';
 import {
-  BullMqEventJobQueue,
-  startBullMqEventWorker
-} from '@fanpage/queue';
+  FakeMessagingChannel,
+  MetaGraphMessagingChannel,
+  type MessagingChannel
+} from '@fanpage/meta';
+import { BullMqEventJobQueue, startBullMqEventWorker } from '@fanpage/queue';
 import { buildApp } from './app.js';
 import { createWebhookIngestionService } from './services/webhook-ingestion.js';
 import { InboundMessageWorker } from './workers/inbound-message-worker.js';
@@ -16,12 +18,29 @@ const queue = new BullMqEventJobQueue(config.REDIS_URL);
 const inboundWorker = new InboundMessageWorker(repository);
 const queueWorker = startBullMqEventWorker(config.REDIS_URL, inboundWorker);
 const ingestion = createWebhookIngestionService({ repository, queue });
+function createMessagingChannel(): MessagingChannel {
+  if (config.META_ADAPTER === 'fake') return new FakeMessagingChannel();
+  const accessToken = config.META_PAGE_ACCESS_TOKEN;
+  if (!accessToken) {
+    throw new Error('META_PAGE_ACCESS_TOKEN is required for graph adapter');
+  }
+  return new MetaGraphMessagingChannel({
+    accessToken,
+    apiVersion: config.META_GRAPH_API_VERSION
+  });
+}
+
+const messagingChannel = createMessagingChannel();
 const app = buildApp({
   config: {
     metaAppSecret: config.META_APP_SECRET,
     metaVerifyToken: config.META_VERIFY_TOKEN
   },
   ingestion,
+  logger,
+  messagingChannel,
+  enableTestMessagingRoutes:
+    config.NODE_ENV !== 'production' && config.META_ADAPTER === 'fake',
   readiness: {
     async check() {
       await Promise.all([repository.ping(), queue.ping()]);

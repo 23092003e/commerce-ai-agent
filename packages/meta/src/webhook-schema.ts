@@ -6,7 +6,7 @@ const MetaMessageSchema = z
     text: z.string().optional(),
     is_echo: z.boolean().optional()
   })
-  .passthrough();
+  .loose();
 
 const MetaMessagingEventSchema = z
   .object({
@@ -15,7 +15,7 @@ const MetaMessagingEventSchema = z
     timestamp: z.number().int().nonnegative(),
     message: MetaMessageSchema.optional()
   })
-  .passthrough();
+  .loose();
 
 const MetaEntrySchema = z
   .object({
@@ -23,7 +23,7 @@ const MetaEntrySchema = z
     time: z.number().int().nonnegative(),
     messaging: z.array(MetaMessagingEventSchema).default([])
   })
-  .passthrough();
+  .loose();
 
 export const MetaWebhookPayloadSchema = z
   .object({

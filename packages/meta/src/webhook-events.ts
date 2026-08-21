@@ -30,7 +30,8 @@ function stableJson(value: unknown): string {
       .join(',')}}`;
   }
 
-  return JSON.stringify(value) ?? 'null';
+  const serialized = JSON.stringify(value);
+  return typeof serialized === 'string' ? serialized : 'null';
 }
 
 export function extractMetaWebhookEvents(
