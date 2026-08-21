@@ -75,6 +75,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@fanpage/domain':
+        specifier: workspace:*
+        version: link:../domain
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@types/pg@8.23.1)(pg@8.23.0)
@@ -85,6 +88,12 @@ importers:
       '@types/pg':
         specifier: ^8.15.6
         version: 8.23.1
+
+  packages/domain:
+    dependencies:
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
 
   packages/meta:
     dependencies:

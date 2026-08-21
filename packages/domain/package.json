@@ -1,5 +1,5 @@
 {
-  "name": "@fanpage/db",
+  "name": "@fanpage/domain",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,15 +8,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "migrate": "tsx src/migrate-cli.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fanpage/domain": "workspace:*",
-    "drizzle-orm": "^0.44.7",
-    "pg": "^8.16.3"
-  },
-  "devDependencies": {
-    "@types/pg": "^8.15.6"
+    "zod": "^4.1.13"
   }
 }

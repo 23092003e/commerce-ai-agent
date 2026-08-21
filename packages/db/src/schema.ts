@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  char,
   index,
   integer,
   jsonb,
@@ -62,6 +63,21 @@ export const webhookProcessingState = pgEnum('webhook_processing_state', [
   'processed',
   'failed',
   'ignored'
+]);
+export const productStatus = pgEnum('product_status', [
+  'active',
+  'draft',
+  'archived'
+]);
+export const productVariantStatus = pgEnum('product_variant_status', [
+  'active',
+  'inactive'
+]);
+export const promotionStatus = pgEnum('promotion_status', [
+  'active',
+  'inactive',
+  'scheduled',
+  'expired'
 ]);
 
 export const pages = pgTable('pages', {
@@ -200,3 +216,111 @@ export const webhookEvents = pgTable(
       )
   ]
 );
+
+export const productCategories = pgTable('product_categories', {
+  id: uuid().primaryKey().defaultRandom(),
+  slug: text().notNull().unique(),
+  name: text().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const products = pgTable(
+  'products',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    externalId: text('external_id'),
+    sku: text(),
+    name: text().notNull(),
+    slug: text().notNull().unique(),
+    description: text().notNull(),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => productCategories.id),
+    brand: text(),
+    status: productStatus().notNull().default('active'),
+    basePrice: bigint('base_price', { mode: 'number' }).notNull(),
+    currency: char({ length: 3 }).notNull().default('VND'),
+    attributes: jsonb().notNull().default({}),
+    searchText: text('search_text').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+  },
+  (table) => [
+    uniqueIndex('products_external_id_unique')
+      .on(table.externalId)
+      .where(sql`${table.externalId} IS NOT NULL`),
+    uniqueIndex('products_sku_unique')
+      .on(table.sku)
+      .where(sql`${table.sku} IS NOT NULL`),
+    index('products_search_text_idx').using(
+      'gin',
+      sql`to_tsvector('simple', ${table.searchText})`
+    )
+  ]
+);
+
+export const productVariants = pgTable(
+  'product_variants',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id),
+    sku: text().notNull().unique(),
+    title: text().notNull(),
+    color: text(),
+    size: text(),
+    price: bigint({ mode: 'number' }).notNull(),
+    compareAtPrice: bigint('compare_at_price', { mode: 'number' }),
+    status: productVariantStatus().notNull().default('active'),
+    attributes: jsonb().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+  },
+  (table) => [
+    index('product_variants_product_idx').on(table.productId),
+    index('product_variants_filters_idx')
+      .on(table.color, table.size, table.price)
+      .where(sql`${table.status} = 'active'`)
+  ]
+);
+
+export const inventory = pgTable('inventory', {
+  variantId: uuid('variant_id')
+    .primaryKey()
+    .references(() => productVariants.id),
+  quantityAvailable: integer('quantity_available').notNull().default(0),
+  quantityReserved: integer('quantity_reserved').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const promotions = pgTable('promotions', {
+  id: uuid().primaryKey().defaultRandom(),
+  name: text().notNull(),
+  status: promotionStatus().notNull().default('inactive'),
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  rules: jsonb().notNull().default({}),
+  priority: integer().notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});

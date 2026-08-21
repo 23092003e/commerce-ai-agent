@@ -1,6 +1,6 @@
 # Facebook Fanpage AI Sales Agent
 
-Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–2: secure Meta webhook ingress, durable event storage, Redis queueing, ordered/idempotent inbound-message persistence, optimistic conversation updates, explicit AI/human control state, and fake/Graph outbound text adapters. It deliberately contains no AI sales logic yet.
+Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–3: secure Meta webhook ingress, durable event storage, ordered/idempotent processing, optimistic conversation updates, explicit AI/human control state, and a relational demo catalog with typed search, inventory checks, and product references. It deliberately contains no AI sales logic yet.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ pnpm.cmd test:integration
 pnpm.cmd build
 ```
 
-`pnpm test:integration` expects healthy PostgreSQL and Redis services. It executes signed fixtures through Fastify, PostgreSQL, BullMQ, and the worker, then verifies idempotent persistence, retry recovery, monotonic conversation timestamps, and optimistic-concurrency conflicts.
+`pnpm test:integration` expects healthy PostgreSQL and Redis services. It verifies the signed webhook pipeline, retry recovery, ordered conversation updates, catalog filtering, live available-to-sell inventory, and product-reference concurrency.
 
 ## Runtime flow
 
@@ -76,9 +76,10 @@ Migrations under `packages/db/migrations` are immutable. The migration runner re
 
 - `apps/api`: Fastify routes, ingestion service, worker composition
 - `packages/meta`: Meta schemas, HMAC verification, normalization, channel adapters
+- `packages/domain`: validated provider-neutral catalog contracts and service
 - `packages/db`: schema, migrations, repository contracts and implementations
 - `packages/queue`: BullMQ and in-memory queue adapters
 - `packages/config`: environment validation
 - `packages/observability`: structured/redacted logging
 
-The next milestone is Phase 3: add the structured catalog, variants, inventory, and typed product search without relying on AI-generated product facts.
+The next milestone is Phase 4: add evidence-backed knowledge ingestion and hybrid retrieval for policies and approved business content.
