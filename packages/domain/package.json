@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "js-tiktoken": "1.0.21",
     "zod": "^4.1.13"
   }
 }

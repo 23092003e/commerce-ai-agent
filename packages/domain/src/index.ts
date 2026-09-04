@@ -1,4 +1,17 @@
 export {
+  createDeterministicEmbeddingProvider,
+  createKnowledgeService,
+  KnowledgeIngestionSchema,
+  KnowledgeSearchSchema,
+  type EmbeddingProvider,
+  type KnowledgeRepository,
+  type KnowledgeSearchHit,
+  type KnowledgeSearchResult,
+  type KnowledgeService,
+  type PreparedKnowledgeChunk,
+  type PreparedKnowledgeDocument
+} from './knowledge.js';
+export {
   createCatalogService,
   InventoryCheckSchema,
   ProductLookupSchema,

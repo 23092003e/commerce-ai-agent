@@ -1,6 +1,6 @@
 # Facebook Fanpage AI Sales Agent
 
-Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–3: secure Meta webhook ingress, durable event storage, ordered/idempotent processing, optimistic conversation updates, explicit AI/human control state, and a relational demo catalog with typed search, inventory checks, and product references. It deliberately contains no AI sales logic yet.
+Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–4: secure Meta webhook ingress, durable event storage, ordered/idempotent processing, optimistic conversation updates, explicit AI/human control state, a relational demo catalog, and evidence-backed Knowledge RAG with Postgres FTS, pgvector retrieval, and Reciprocal Rank Fusion. It deliberately contains no AI sales logic yet.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ pnpm.cmd test:integration
 pnpm.cmd build
 ```
 
-`pnpm test:integration` expects healthy PostgreSQL and Redis services. It verifies the signed webhook pipeline, retry recovery, ordered conversation updates, catalog filtering, live available-to-sell inventory, and product-reference concurrency.
+`pnpm test:integration` expects healthy PostgreSQL and Redis services. It verifies the signed webhook pipeline, retry recovery, ordered conversation updates, catalog filtering, live available-to-sell inventory, product-reference concurrency, and grounded knowledge retrieval.
 
 ## Runtime flow
 
@@ -82,4 +82,4 @@ Migrations under `packages/db/migrations` are immutable. The migration runner re
 - `packages/config`: environment validation
 - `packages/observability`: structured/redacted logging
 
-The next milestone is Phase 4: add evidence-backed knowledge ingestion and hybrid retrieval for policies and approved business content.
+The next milestone is Phase 5: add the bounded agent orchestrator that uses the catalog and knowledge tools.
