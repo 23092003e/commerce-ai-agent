@@ -3,6 +3,7 @@ import { z } from 'zod';
 const AgentContextSchema = z
   .object({
     customerMessage: z.string().trim().min(1).max(2_000),
+    controlMode: z.enum(['ai', 'human', 'paused']).default('ai'),
     summary: z.string().trim().min(1).max(2_000).optional(),
     productReferences: z
       .array(

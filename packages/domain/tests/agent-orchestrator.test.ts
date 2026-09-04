@@ -47,10 +47,31 @@ describe('agent orchestrator', () => {
     expect(observed).toEqual([
       {
         customerMessage: 'Tôi cần áo polo',
+        controlMode: 'ai',
         summary: 'Khách thích màu tối.',
         productReferences: [{ position: 1, productId, variantId: null }]
       }
     ]);
+  });
+
+  it('never calls the model or emits a reply while human controls the conversation', async () => {
+    let calls = 0;
+    const provider: StructuredDecisionProvider = {
+      async decide() {
+        calls += 1;
+        return { type: 'reply', text: 'forbidden', evidenceChunkIds: [] };
+      }
+    };
+    await expect(
+      createAgentOrchestrator({ provider, tools: [] }).run({
+        customerMessage: 'Xin chào',
+        controlMode: 'human'
+      })
+    ).resolves.toMatchObject({
+      type: 'suppressed',
+      reason: 'human_controlled'
+    });
+    expect(calls).toBe(0);
   });
 
   it('builds a versioned sales prompt that treats memory as untrusted data', () => {

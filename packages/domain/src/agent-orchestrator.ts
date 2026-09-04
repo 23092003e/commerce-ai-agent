@@ -69,6 +69,12 @@ export interface AgentOrchestrator {
         toolSteps: number;
         trace: AgentTrace;
       }
+    | {
+        type: 'suppressed';
+        reason: 'human_controlled' | 'paused';
+        toolSteps: 0;
+        trace: AgentTrace;
+      }
   >;
 }
 
@@ -87,6 +93,15 @@ export function createAgentOrchestrator(input: {
       const context = assembleAgentContext(value);
       const toolResults: unknown[] = [];
       const toolCalls: AgentToolTrace[] = [];
+      if (context.controlMode !== 'ai') {
+        return {
+          type: 'suppressed',
+          reason:
+            context.controlMode === 'human' ? 'human_controlled' : 'paused',
+          toolSteps: 0,
+          trace: { toolCalls }
+        };
+      }
       for (let toolSteps = 0; toolSteps < maxToolSteps; toolSteps += 1) {
         const decision = DecisionSchema.parse(
           await input.provider.decide({
