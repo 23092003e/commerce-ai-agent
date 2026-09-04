@@ -1,3 +1,19 @@
+export { createReadOnlyAgentTools } from './agent-tools.js';
+export { assembleAgentContext, type AgentContext } from './agent-context.js';
+export { createScriptedDecisionProvider } from './fake-decision-provider.js';
+export {
+  createSalesSystemPrompt,
+  SALES_SYSTEM_PROMPT_VERSION
+} from './sales-prompts.js';
+export {
+  createAgentOrchestrator,
+  type AgentOrchestrator,
+  type AgentTool,
+  type AgentToolTrace,
+  type AgentTrace,
+  type StructuredDecision,
+  type StructuredDecisionProvider
+} from './agent-orchestrator.js';
 export {
   createDeterministicEmbeddingProvider,
   createKnowledgeService,
