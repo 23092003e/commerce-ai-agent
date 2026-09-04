@@ -94,6 +94,11 @@ export const toolCallStatus = pgEnum('tool_call_status', [
   'succeeded',
   'failed'
 ]);
+export const cartStatus = pgEnum('cart_status', [
+  'active',
+  'converted',
+  'abandoned'
+]);
 
 export const pages = pgTable('pages', {
   id: uuid().primaryKey().defaultRandom(),
@@ -219,6 +224,47 @@ export const agentRuns = pgTable('agent_runs', {
   latencyMs: integer('latency_ms'),
   finalOutcome: agentRunOutcome('final_outcome'),
   error: text()
+});
+
+export const carts = pgTable('carts', {
+  id: uuid().primaryKey().defaultRandom(),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id),
+  conversationId: uuid('conversation_id')
+    .notNull()
+    .references(() => conversations.id),
+  status: cartStatus().notNull().default('active'),
+  currency: char({ length: 3 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+export const cartItems = pgTable('cart_items', {
+  id: uuid().primaryKey().defaultRandom(),
+  cartId: uuid('cart_id')
+    .notNull()
+    .references(() => carts.id),
+  productId: uuid('product_id')
+    .notNull()
+    .references(() => products.id),
+  variantId: uuid('variant_id')
+    .notNull()
+    .references(() => productVariants.id),
+  quantity: integer().notNull(),
+  unitPriceSnapshot: bigint('unit_price_snapshot', {
+    mode: 'number'
+  }).notNull(),
+  metadata: jsonb().notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
 });
 
 export const toolCalls = pgTable('tool_calls', {

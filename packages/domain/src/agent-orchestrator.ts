@@ -6,7 +6,10 @@ const toolNames = [
   'catalog.searchProducts',
   'catalog.getProduct',
   'catalog.getVariant',
-  'catalog.checkInventory'
+  'catalog.checkInventory',
+  'cart.add',
+  'cart.update',
+  'cart.remove'
 ] as const;
 
 const DecisionSchema = z.discriminatedUnion('type', [

@@ -1,4 +1,5 @@
 import type { CatalogService } from './catalog.js';
+import type { CartService } from './cart.js';
 import type { KnowledgeService } from './knowledge.js';
 import type { AgentTool } from './agent-orchestrator.js';
 
@@ -27,5 +28,15 @@ export function createReadOnlyAgentTools(input: {
       name: 'catalog.checkInventory',
       execute: (value) => input.catalog.checkInventory(value)
     }
+  ];
+}
+
+export function createCartAgentTools(input: {
+  cart: CartService;
+}): AgentTool[] {
+  return [
+    { name: 'cart.add', execute: (value) => input.cart.add(value) },
+    { name: 'cart.update', execute: (value) => input.cart.update(value) },
+    { name: 'cart.remove', execute: (value) => input.cart.remove(value) }
   ];
 }

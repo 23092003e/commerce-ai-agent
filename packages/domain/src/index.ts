@@ -1,4 +1,13 @@
-export { createReadOnlyAgentTools } from './agent-tools.js';
+export {
+  createCartAgentTools,
+  createReadOnlyAgentTools
+} from './agent-tools.js';
+export {
+  createCartService,
+  type Cart,
+  type CartRepository,
+  type CartService
+} from './cart.js';
 export { assembleAgentContext, type AgentContext } from './agent-context.js';
 export { createScriptedDecisionProvider } from './fake-decision-provider.js';
 export {
