@@ -8,6 +8,17 @@ export {
   type CartRepository,
   type CartService
 } from './cart.js';
+export {
+  CheckoutSnapshotSchema,
+  createCheckoutConfirmation,
+  verifyCheckoutConfirmation,
+  type CheckoutSnapshot
+} from './checkout.js';
+export {
+  createOrderService,
+  type ConfirmedOrderRepository,
+  type OrderService
+} from './order.js';
 export { assembleAgentContext, type AgentContext } from './agent-context.js';
 export { createScriptedDecisionProvider } from './fake-decision-provider.js';
 export {

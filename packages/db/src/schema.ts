@@ -236,6 +236,7 @@ export const carts = pgTable('carts', {
     .references(() => conversations.id),
   status: cartStatus().notNull().default('active'),
   currency: char({ length: 3 }).notNull(),
+  version: integer().notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
