@@ -16,6 +16,7 @@ const EnvironmentSchema = z.object({
     .string()
     .regex(/^v\d+\.\d+$/u)
     .default('v23.0'),
+  ADMIN_AUTH_SECRET: z.string().min(32).optional(),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info')

@@ -41,6 +41,9 @@ const app = buildApp({
   messagingChannel,
   enableTestMessagingRoutes:
     config.NODE_ENV !== 'production' && config.META_ADAPTER === 'fake',
+  admin: config.ADMIN_AUTH_SECRET
+    ? { secret: config.ADMIN_AUTH_SECRET, repository }
+    : { repository },
   readiness: {
     async check() {
       await Promise.all([repository.ping(), queue.ping()]);

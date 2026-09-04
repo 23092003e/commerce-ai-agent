@@ -11,6 +11,8 @@ import {
   verifyMetaSignature
 } from '@fanpage/meta';
 import { z } from 'zod';
+import type { CommerceRepository } from '@fanpage/db';
+import { isAuthorizedAdmin } from './services/admin-auth.js';
 import type { WebhookIngestion } from './services/webhook-ingestion.js';
 
 const VerificationQuerySchema = z.object({
@@ -36,6 +38,7 @@ export interface BuildAppOptions {
   logger?: FastifyBaseLogger;
   messagingChannel?: MessagingChannel;
   enableTestMessagingRoutes?: boolean;
+  admin?: { secret?: string; repository: CommerceRepository };
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -66,6 +69,49 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   );
 
   app.get('/health', async () => ({ status: 'ok' }));
+  if (options.admin) {
+    const admin = options.admin;
+    app.post(
+      '/internal/admin/conversations/:conversationId/control',
+      async (request, reply) => {
+        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+          return reply.code(401).send({ error: 'admin_unauthorized' });
+        }
+        const params = z
+          .object({ conversationId: z.uuid() })
+          .safeParse(request.params);
+        let requestBody: unknown;
+        try {
+          requestBody = Buffer.isBuffer(request.body)
+            ? (JSON.parse(request.body.toString('utf8')) as unknown)
+            : request.body;
+        } catch {
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        }
+        const body = z
+          .object({
+            expectedVersion: z.number().int().positive(),
+            controlMode: z.enum(['ai', 'human', 'paused'])
+          })
+          .safeParse(requestBody);
+        if (!params.success || !body.success)
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        const result = await admin.repository.updateConversationControlMode({
+          conversationId: params.data.conversationId,
+          ...body.data
+        });
+        return reply
+          .code(
+            result.type === 'updated'
+              ? 200
+              : result.type === 'conflict'
+                ? 409
+                : 404
+          )
+          .send(result);
+      }
+    );
+  }
   app.get('/ready', async (_request, reply) => {
     try {
       await options.readiness?.check();
