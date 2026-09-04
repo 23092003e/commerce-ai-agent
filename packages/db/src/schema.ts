@@ -79,6 +79,21 @@ export const promotionStatus = pgEnum('promotion_status', [
   'scheduled',
   'expired'
 ]);
+export const agentRunStatus = pgEnum('agent_run_status', [
+  'running',
+  'completed',
+  'failed'
+]);
+export const agentRunOutcome = pgEnum('agent_run_outcome', [
+  'replied',
+  'handed_over',
+  'no_action',
+  'failed'
+]);
+export const toolCallStatus = pgEnum('tool_call_status', [
+  'succeeded',
+  'failed'
+]);
 
 export const pages = pgTable('pages', {
   id: uuid().primaryKey().defaultRandom(),
@@ -182,6 +197,44 @@ export const messages = pgTable(
       .where(sql`${table.metaMessageId} IS NOT NULL`)
   ]
 );
+
+export const agentRuns = pgTable('agent_runs', {
+  id: uuid().primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id')
+    .notNull()
+    .references(() => conversations.id),
+  inboundMessageId: uuid('inbound_message_id')
+    .notNull()
+    .references(() => messages.id),
+  modelProvider: text('model_provider').notNull(),
+  modelName: text('model_name').notNull(),
+  promptVersion: text('prompt_version').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  status: agentRunStatus().notNull().default('running'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  latencyMs: integer('latency_ms'),
+  finalOutcome: agentRunOutcome('final_outcome'),
+  error: text()
+});
+
+export const toolCalls = pgTable('tool_calls', {
+  id: uuid().primaryKey().defaultRandom(),
+  agentRunId: uuid('agent_run_id')
+    .notNull()
+    .references(() => agentRuns.id),
+  toolName: text('tool_name').notNull(),
+  arguments: jsonb().notNull().default({}),
+  resultSummary: jsonb('result_summary').notNull().default({}),
+  status: toolCallStatus().notNull(),
+  latencyMs: integer('latency_ms').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
 
 export const webhookEvents = pgTable(
   'webhook_events',
