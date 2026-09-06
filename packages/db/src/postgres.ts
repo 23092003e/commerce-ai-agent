@@ -6,6 +6,7 @@ import type {
   CommerceRepository,
   ConversationView,
   PersistInboundMessageInput,
+  PersistInboundMessageResult,
   StoredWebhookEvent,
   StoreWebhookEventInput,
   UpdateConversationControlModeInput,
@@ -158,7 +159,7 @@ export class PostgresCommerceRepository implements CommerceRepository {
 
   async persistInboundMessage(
     input: PersistInboundMessageInput
-  ): Promise<boolean> {
+  ): Promise<PersistInboundMessageResult> {
     return this.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.metaPageId}:${input.metaPsid}`}, 0))`
@@ -169,7 +170,9 @@ export class PostgresCommerceRepository implements CommerceRepository {
         .from(schema.webhookEvents)
         .where(eq(schema.webhookEvents.externalEventKey, input.eventKey))
         .limit(1);
-      if (!event || event.processingState === 'processed') return false;
+      if (!event || event.processingState === 'processed') {
+        return { type: 'duplicate' };
+      }
 
       const now = new Date();
       const messageTime = new Date(input.timestamp);
@@ -197,7 +200,7 @@ export class PostgresCommerceRepository implements CommerceRepository {
       if (!customer) throw new Error('Failed to resolve customer');
 
       let [conversation] = await tx
-        .select({ id: schema.conversations.id })
+        .select()
         .from(schema.conversations)
         .where(
           and(
@@ -212,7 +215,7 @@ export class PostgresCommerceRepository implements CommerceRepository {
         [conversation] = await tx
           .insert(schema.conversations)
           .values({ pageId: page.id, customerId: customer.id })
-          .returning({ id: schema.conversations.id });
+          .returning();
       }
       if (!conversation) throw new Error('Failed to resolve conversation');
 
@@ -232,8 +235,9 @@ export class PostgresCommerceRepository implements CommerceRepository {
         .onConflictDoNothing()
         .returning({ id: schema.messages.id });
 
+      let updatedConversation = conversation;
       if (inserted.length > 0) {
-        await tx
+        const [updated] = await tx
           .update(schema.conversations)
           .set({
             lastCustomerMessageAt: sql`GREATEST(COALESCE(${schema.conversations.lastCustomerMessageAt}, ${messageTime}), ${messageTime})`,
@@ -241,7 +245,10 @@ export class PostgresCommerceRepository implements CommerceRepository {
             version: sql`${schema.conversations.version} + 1`,
             updatedAt: now
           })
-          .where(eq(schema.conversations.id, conversation.id));
+          .where(eq(schema.conversations.id, conversation.id))
+          .returning();
+        if (!updated) throw new Error('Conversation was not updated');
+        updatedConversation = updated;
       }
 
       await tx
@@ -255,7 +262,15 @@ export class PostgresCommerceRepository implements CommerceRepository {
         })
         .where(eq(schema.webhookEvents.externalEventKey, input.eventKey));
 
-      return inserted.length > 0;
+      const message = inserted[0];
+      return message
+        ? {
+            type: 'persisted',
+            messageId: message.id,
+            customerId: customer.id,
+            conversation: mapConversation(updatedConversation)
+          }
+        : { type: 'duplicate' };
     });
   }
 

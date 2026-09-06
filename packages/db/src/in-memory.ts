@@ -3,6 +3,7 @@ import type {
   CommerceRepository,
   ConversationView,
   PersistInboundMessageInput,
+  PersistInboundMessageResult,
   RepositorySnapshot,
   StoredWebhookEvent,
   StoreWebhookEventInput,
@@ -97,9 +98,11 @@ export class InMemoryCommerceRepository implements CommerceRepository {
 
   async persistInboundMessage(
     input: PersistInboundMessageInput
-  ): Promise<boolean> {
+  ): Promise<PersistInboundMessageResult> {
     const event = this.events.get(input.eventKey);
-    if (!event || event.processingState === 'processed') return false;
+    if (!event || event.processingState === 'processed') {
+      return { type: 'duplicate' };
+    }
 
     let page = this.pages.get(input.metaPageId);
     if (!page) {
@@ -133,9 +136,11 @@ export class InMemoryCommerceRepository implements CommerceRepository {
     }
 
     const inserted = !this.messages.has(input.metaMessageId);
+    let messageId: string | null = null;
     if (inserted) {
+      messageId = randomUUID();
       this.messages.set(input.metaMessageId, {
-        id: randomUUID(),
+        id: messageId,
         conversationId: conversation.id,
         metaMessageId: input.metaMessageId,
         direction: 'inbound',
@@ -147,7 +152,14 @@ export class InMemoryCommerceRepository implements CommerceRepository {
 
     event.processingState = 'processed';
     event.attempts += 1;
-    return inserted;
+    return inserted && messageId
+      ? {
+          type: 'persisted',
+          messageId,
+          customerId: customer.id,
+          conversation: structuredClone(conversation)
+        }
+      : { type: 'duplicate' };
   }
 
   async findOpenConversationByIdentity(

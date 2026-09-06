@@ -12,6 +12,7 @@
   "dependencies": {
     "@fanpage/config": "workspace:*",
     "@fanpage/db": "workspace:*",
+    "@fanpage/domain": "workspace:*",
     "@fanpage/meta": "workspace:*",
     "@fanpage/observability": "workspace:*",
     "@fanpage/queue": "workspace:*",

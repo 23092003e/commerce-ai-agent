@@ -1,11 +1,25 @@
-import type { CommerceRepository } from '@fanpage/db';
+import type { CommerceRepository, ConversationView } from '@fanpage/db';
 import { normalizeInboundTextMessage } from '@fanpage/meta';
 import type { EventJobResult } from '@fanpage/queue';
 
 const ORDERING_RETRY_DELAY_MS = 100;
 
+export interface PersistedInboundMessageHandler {
+  handle(input: {
+    messageId: string;
+    customerId: string;
+    conversation: ConversationView;
+    recipientId: string;
+    text: string;
+    timestamp: number;
+  }): Promise<void>;
+}
+
 export class InboundMessageWorker {
-  constructor(private readonly repository: CommerceRepository) {}
+  constructor(
+    private readonly repository: CommerceRepository,
+    private readonly persistedMessageHandler?: PersistedInboundMessageHandler
+  ) {}
 
   async process(eventKey: string): Promise<EventJobResult> {
     const claim =
@@ -24,10 +38,20 @@ export class InboundMessageWorker {
       return { type: 'completed' };
     }
 
-    await this.repository.persistInboundMessage({
+    const persisted = await this.repository.persistInboundMessage({
       eventKey,
       ...message
     });
+    if (persisted.type === 'persisted' && this.persistedMessageHandler) {
+      await this.persistedMessageHandler.handle({
+        messageId: persisted.messageId,
+        customerId: persisted.customerId,
+        conversation: persisted.conversation,
+        recipientId: message.metaPsid,
+        text: message.text,
+        timestamp: message.timestamp
+      });
+    }
     return { type: 'completed' };
   }
 

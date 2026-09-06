@@ -57,6 +57,15 @@ export interface PersistInboundMessageInput {
   payload: unknown;
 }
 
+export type PersistInboundMessageResult =
+  | { type: 'duplicate' }
+  | {
+      type: 'persisted';
+      messageId: string;
+      customerId: string;
+      conversation: ConversationView;
+    };
+
 export interface CommerceRepository {
   storeWebhookEvent(input: StoreWebhookEventInput): Promise<StoredWebhookEvent>;
   markWebhookEventQueued(eventKey: string): Promise<void>;
@@ -64,7 +73,9 @@ export interface CommerceRepository {
   claimWebhookEventForProcessing(
     eventKey: string
   ): Promise<WebhookEventClaimResult>;
-  persistInboundMessage(input: PersistInboundMessageInput): Promise<boolean>;
+  persistInboundMessage(
+    input: PersistInboundMessageInput
+  ): Promise<PersistInboundMessageResult>;
   findOpenConversationByIdentity(
     metaPageId: string,
     metaPsid: string

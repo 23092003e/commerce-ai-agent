@@ -75,6 +75,9 @@ importers:
       '@fanpage/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@fanpage/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@fanpage/meta':
         specifier: workspace:*
         version: link:../../packages/meta

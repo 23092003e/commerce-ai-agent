@@ -14,6 +14,7 @@ export type {
   ConversationControlMode,
   ConversationView,
   PersistInboundMessageInput,
+  PersistInboundMessageResult,
   RepositorySnapshot,
   StoredWebhookEvent,
   StoreWebhookEventInput,
