@@ -16,6 +16,9 @@ const EnvironmentSchema = z.object({
     .string()
     .regex(/^v\d+\.\d+$/u)
     .default('v23.0'),
+  AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
+  AI_MODEL: z.string().trim().min(1).optional(),
+  AI_API_KEY: z.string().min(1).optional(),
   ADMIN_AUTH_SECRET: z.string().min(32).optional(),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -29,6 +32,14 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   if (config.META_ADAPTER === 'graph' && !config.META_PAGE_ACCESS_TOKEN) {
     throw new Error(
       'META_PAGE_ACCESS_TOKEN is required for META_ADAPTER=graph'
+    );
+  }
+  if (
+    config.AI_PROVIDER !== 'fake' &&
+    (!config.AI_MODEL || !config.AI_API_KEY)
+  ) {
+    throw new Error(
+      'AI_MODEL and AI_API_KEY are required for a real AI provider'
     );
   }
   return config;
