@@ -21,6 +21,7 @@ export {
 } from './order.js';
 export { assembleAgentContext, type AgentContext } from './agent-context.js';
 export { createScriptedDecisionProvider } from './fake-decision-provider.js';
+export { createOpenAiDecisionProvider } from './openai-decision-provider.js';
 export {
   createSalesSystemPrompt,
   SALES_SYSTEM_PROMPT_VERSION
