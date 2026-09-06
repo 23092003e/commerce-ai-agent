@@ -34,17 +34,22 @@ function outputText(value: unknown): string {
 export function createOpenAiDecisionProvider(input: {
   apiKey: string;
   model: string;
+  baseUrl?: string;
   fetch?: FetchLike;
   timeoutMs?: number;
 }): StructuredDecisionProvider {
   const fetcher = input.fetch ?? fetch;
   const timeoutMs = input.timeoutMs ?? 15_000;
+  const baseUrl = (input.baseUrl ?? 'https://api.openai.com/v1').replace(
+    /\/$/u,
+    ''
+  );
   return {
     async decide({ context, toolResults }) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetcher('https://api.openai.com/v1/responses', {
+        const response = await fetcher(`${baseUrl}/responses`, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${input.apiKey}`,

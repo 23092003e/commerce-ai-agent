@@ -13,5 +13,13 @@ describe('AI config', () => {
     expect(() =>
       loadConfig({ ...base, AI_PROVIDER: 'openai', AI_MODEL: 'gpt-test' })
     ).toThrow('AI_MODEL and AI_API_KEY');
+    expect(
+      loadConfig({
+        ...base,
+        AI_PROVIDER: 'openrouter',
+        AI_MODEL: 'deepseek/deepseek-chat',
+        AI_API_KEY: 'key'
+      }).AI_PROVIDER
+    ).toBe('openrouter');
   });
 });

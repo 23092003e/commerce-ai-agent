@@ -16,7 +16,7 @@ const EnvironmentSchema = z.object({
     .string()
     .regex(/^v\d+\.\d+$/u)
     .default('v23.0'),
-  AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
+  AI_PROVIDER: z.enum(['fake', 'openai', 'openrouter']).default('fake'),
   AI_MODEL: z.string().trim().min(1).optional(),
   AI_API_KEY: z.string().min(1).optional(),
   ADMIN_AUTH_SECRET: z.string().min(32).optional(),

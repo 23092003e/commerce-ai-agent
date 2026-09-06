@@ -83,11 +83,15 @@ function createDecisionProvider(): StructuredDecisionProvider {
     };
   }
   if (!config.AI_API_KEY || !config.AI_MODEL) {
-    throw new Error('AI_API_KEY and AI_MODEL are required for OpenAI');
+    throw new Error('AI_API_KEY and AI_MODEL are required for the AI provider');
   }
   return createOpenAiDecisionProvider({
     apiKey: config.AI_API_KEY,
-    model: config.AI_MODEL
+    model: config.AI_MODEL,
+    baseUrl:
+      config.AI_PROVIDER === 'openrouter'
+        ? 'https://openrouter.ai/api/v1'
+        : undefined
   });
 }
 
