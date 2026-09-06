@@ -6,7 +6,10 @@ import { InMemoryEventJobQueue } from '@fanpage/queue';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createWebhookIngestionService } from '../src/services/webhook-ingestion.js';
-import { InboundMessageWorker } from '../src/workers/inbound-message-worker.js';
+import {
+  InboundMessageWorker,
+  type PersistedInboundMessageHandler
+} from '../src/workers/inbound-message-worker.js';
 
 const config = {
   metaAppSecret: 'test-app-secret',
@@ -27,11 +30,13 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map(async (app) => app.close()));
 });
 
-function createHarness() {
+function createHarness(
+  persistedMessageHandler?: PersistedInboundMessageHandler
+) {
   const repository = new InMemoryCommerceRepository();
   const queue = new InMemoryEventJobQueue();
   const ingestion = createWebhookIngestionService({ repository, queue });
-  const worker = new InboundMessageWorker(repository);
+  const worker = new InboundMessageWorker(repository, persistedMessageHandler);
   const app = buildApp({ config, ingestion });
   apps.push(app);
 
@@ -87,6 +92,31 @@ describe('Meta webhook ingestion pipeline', () => {
     const snapshot = repository.snapshot();
     expect(snapshot.webhookEvents).toHaveLength(1);
     expect(snapshot.messages).toHaveLength(1);
+  });
+
+  it('runs the persisted-message handler exactly once with durable identifiers', async () => {
+    const handled: Parameters<PersistedInboundMessageHandler['handle']>[0][] =
+      [];
+    const { app, queue, worker } = createHarness({
+      async handle(message) {
+        handled.push(message);
+      }
+    });
+
+    expect((await postFixture(app, firstFixture)).statusCode).toBe(200);
+    expect((await postFixture(app, firstFixture)).statusCode).toBe(200);
+    const eventKey = await processNext(queue, worker);
+    await worker.process(eventKey);
+
+    expect(handled).toHaveLength(1);
+    const handledMessage = handled[0];
+    if (!handledMessage) throw new Error('Expected a persisted message');
+    expect(handledMessage.customerId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(handledMessage.messageId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(handledMessage.recipientId).toBe('customer-456');
+    expect(handledMessage.text).toBe('Mình muốn xem sản phẩm');
+    expect(handledMessage.conversation.id).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(handledMessage.conversation.controlMode).toBe('ai');
   });
 
   it('creates a customer, conversation, and inbound text message', async () => {
