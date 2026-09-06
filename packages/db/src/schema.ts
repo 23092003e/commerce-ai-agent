@@ -99,6 +99,11 @@ export const cartStatus = pgEnum('cart_status', [
   'converted',
   'abandoned'
 ]);
+export const paymentMethod = pgEnum('payment_method', [
+  'cod',
+  'bank_transfer',
+  'other'
+]);
 
 export const pages = pgTable('pages', {
   id: uuid().primaryKey().defaultRandom(),
@@ -237,6 +242,26 @@ export const carts = pgTable('carts', {
   status: cartStatus().notNull().default('active'),
   currency: char({ length: 3 }).notNull(),
   version: integer().notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const checkoutDrafts = pgTable('checkout_drafts', {
+  conversationId: uuid('conversation_id')
+    .primaryKey()
+    .references(() => conversations.id),
+  cartId: uuid('cart_id').references(() => carts.id),
+  cartVersion: integer('cart_version'),
+  recipientName: text('recipient_name'),
+  phone: text(),
+  address: jsonb(),
+  paymentMethod: paymentMethod('payment_method'),
+  confirmationId: text('confirmation_id'),
+  confirmationSnapshot: jsonb('confirmation_snapshot'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
