@@ -42,6 +42,10 @@ interface HandoverStore {
   }): Promise<unknown>;
 }
 
+interface ErrorLogger {
+  error(bindings: Record<string, unknown>, message: string): void;
+}
+
 const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 function canSendAutomatedReply(timestamp: number, now = Date.now()): boolean {
@@ -84,6 +88,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       modelProvider: string;
       modelName: string;
       promptVersion: string;
+      logger?: ErrorLogger;
     }
   ) {}
 
@@ -174,7 +179,16 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         outcome: 'replied',
         latencyMs
       });
-    } catch {
+    } catch (error) {
+      this.input.logger?.error(
+        {
+          error,
+          agentRunId,
+          conversationId: message.conversation.id,
+          inboundMessageId: message.messageId
+        },
+        'Agent message handling failed'
+      );
       await this.input.agentRuns.complete({
         agentRunId,
         outcome: 'failed',

@@ -113,4 +113,41 @@ describe('AgentMessageHandler', () => {
     expect(completions).toEqual(['handed_over']);
     expect(handovers).toEqual(['messaging_window_expired']);
   });
+
+  it('records an observable error when the outbound channel fails', async () => {
+    const errors: string[] = [];
+    const handler = new AgentMessageHandler({
+      provider: createScriptedDecisionProvider([
+        { type: 'reply', text: 'will fail', evidenceChunkIds: [] }
+      ]),
+      catalog: {} as CatalogService,
+      knowledge: {} as KnowledgeService,
+      cart: {} as CartService,
+      agentRuns: {
+        async start() {
+          return '44444444-4444-4444-8444-444444444444';
+        },
+        async recordToolCall() {},
+        async complete() {}
+      },
+      handovers: { async request() {} },
+      channel: {
+        async sendText() {
+          throw new Error('transport unavailable');
+        }
+      },
+      modelProvider: 'fake',
+      modelName: 'fake',
+      promptVersion: 'test.v1',
+      logger: {
+        error(_bindings, event) {
+          errors.push(event);
+        }
+      }
+    });
+
+    await handler.handle(message);
+
+    expect(errors).toEqual(['Agent message handling failed']);
+  });
 });

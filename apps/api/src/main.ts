@@ -97,7 +97,8 @@ const inboundWorker = new InboundMessageWorker(
     channel: messagingChannel,
     modelProvider: config.AI_PROVIDER,
     modelName: config.AI_MODEL ?? 'fake',
-    promptVersion: SALES_SYSTEM_PROMPT_VERSION
+    promptVersion: SALES_SYSTEM_PROMPT_VERSION,
+    logger
   })
 );
 const queueWorker = startBullMqEventWorker(config.REDIS_URL, inboundWorker);
