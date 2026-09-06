@@ -9,7 +9,12 @@ const toolNames = [
   'catalog.checkInventory',
   'cart.add',
   'cart.update',
-  'cart.remove'
+  'cart.remove',
+  'checkout.start',
+  'checkout.setRecipientName',
+  'checkout.setPhone',
+  'checkout.setAddress',
+  'checkout.setPaymentMethod'
 ] as const;
 
 const DecisionSchema = z.discriminatedUnion('type', [

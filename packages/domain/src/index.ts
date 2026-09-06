@@ -1,5 +1,6 @@
 export {
   createCartAgentTools,
+  createCheckoutAgentTools,
   createReadOnlyAgentTools
 } from './agent-tools.js';
 export {
@@ -18,6 +19,7 @@ export {
   CheckoutDraftSchema,
   createCheckoutFlow,
   type CheckoutDraft,
+  type CheckoutFlow,
   type CheckoutDraftRepository
 } from './checkout-flow.js';
 export {

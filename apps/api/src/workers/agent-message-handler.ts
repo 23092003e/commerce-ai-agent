@@ -1,10 +1,12 @@
 import {
   createAgentOrchestrator,
   createCartAgentTools,
+  createCheckoutAgentTools,
   createReadOnlyAgentTools,
   type AgentTool,
   type CartService,
   type CatalogService,
+  type CheckoutFlow,
   type KnowledgeService,
   type StructuredDecisionProvider
 } from '@fanpage/domain';
@@ -82,6 +84,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       catalog: CatalogService;
       knowledge: KnowledgeService;
       cart: CartService;
+      checkout: CheckoutFlow;
       agentRuns: AgentRunStore;
       handovers: HandoverStore;
       channel: MessagingChannel;
@@ -114,6 +117,10 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           ...scopedCartTools({
             cart: this.input.cart,
             customerId: message.customerId,
+            conversationId: message.conversation.id
+          }),
+          ...createCheckoutAgentTools({
+            checkout: this.input.checkout,
             conversationId: message.conversation.id
           })
         ]

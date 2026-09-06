@@ -3,6 +3,7 @@ import {
   PostgresAgentRunRepository,
   PostgresCartRepository,
   PostgresCatalogRepository,
+  PostgresCheckoutDraftRepository,
   PostgresCommerceRepository,
   PostgresHandoverRepository,
   PostgresKnowledgeRepository
@@ -10,6 +11,7 @@ import {
 import {
   createCartService,
   createCatalogService,
+  createCheckoutFlow,
   createDeterministicEmbeddingProvider,
   createKnowledgeService,
   createOpenAiDecisionProvider,
@@ -51,6 +53,9 @@ const knowledgeRepository = new PostgresKnowledgeRepository(
   config.DATABASE_URL
 );
 const cartRepository = new PostgresCartRepository(config.DATABASE_URL);
+const checkoutDraftRepository = new PostgresCheckoutDraftRepository(
+  config.DATABASE_URL
+);
 const handoverRepository = new PostgresHandoverRepository(config.DATABASE_URL);
 const agentRunRepository = new PostgresAgentRunRepository(config.DATABASE_URL);
 const catalog = createCatalogService(catalogRepository);
@@ -59,6 +64,7 @@ const knowledge = createKnowledgeService(
   createDeterministicEmbeddingProvider(8)
 );
 const cart = createCartService({ catalog, repository: cartRepository });
+const checkout = createCheckoutFlow(checkoutDraftRepository);
 
 function createDecisionProvider(): StructuredDecisionProvider {
   if (config.AI_PROVIDER === 'fake') {
@@ -92,6 +98,7 @@ const inboundWorker = new InboundMessageWorker(
     catalog,
     knowledge,
     cart,
+    checkout,
     agentRuns: agentRunRepository,
     handovers: handoverRepository,
     channel: messagingChannel,
@@ -140,6 +147,7 @@ async function shutdown(signal: string): Promise<void> {
   await agentRunRepository.close();
   await handoverRepository.close();
   await cartRepository.close();
+  await checkoutDraftRepository.close();
   await knowledgeRepository.close();
   await catalogRepository.close();
   await repository.close();

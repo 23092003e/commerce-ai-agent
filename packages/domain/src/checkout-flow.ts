@@ -28,6 +28,13 @@ export const CheckoutDraftSchema = z
   .strict();
 
 export type CheckoutDraft = z.infer<typeof CheckoutDraftSchema>;
+export interface CheckoutFlow {
+  start(conversationId: string): Promise<CheckoutDraft>;
+  setRecipientName(input: unknown): Promise<CheckoutDraft>;
+  setPhone(input: unknown): Promise<CheckoutDraft>;
+  setAddress(input: unknown): Promise<CheckoutDraft>;
+  setPaymentMethod(input: unknown): Promise<CheckoutDraft>;
+}
 export interface CheckoutDraftRepository {
   get(conversationId: string): Promise<CheckoutDraft | null>;
   update(input: {
@@ -46,7 +53,9 @@ function expected(draft: CheckoutDraft, state: CheckoutDraft['state']): void {
     throw new Error(`Expected checkout state: ${state}`);
 }
 
-export function createCheckoutFlow(repository: CheckoutDraftRepository) {
+export function createCheckoutFlow(
+  repository: CheckoutDraftRepository
+): CheckoutFlow {
   return {
     async start(conversationId: string): Promise<CheckoutDraft> {
       const draft = await repository.get(conversationId);

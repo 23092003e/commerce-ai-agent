@@ -2,6 +2,7 @@ import {
   createScriptedDecisionProvider,
   type CartService,
   type CatalogService,
+  type CheckoutFlow,
   type KnowledgeService
 } from '@fanpage/domain';
 import { FakeMessagingChannel } from '@fanpage/meta';
@@ -26,6 +27,7 @@ function createHarness(decisions: unknown[]) {
     catalog: {} as CatalogService,
     knowledge: {} as KnowledgeService,
     cart: {} as CartService,
+    checkout: {} as CheckoutFlow,
     agentRuns: {
       async start() {
         return '44444444-4444-4444-8444-444444444444';
@@ -123,6 +125,7 @@ describe('AgentMessageHandler', () => {
       catalog: {} as CatalogService,
       knowledge: {} as KnowledgeService,
       cart: {} as CartService,
+      checkout: {} as CheckoutFlow,
       agentRuns: {
         async start() {
           return '44444444-4444-4444-8444-444444444444';
