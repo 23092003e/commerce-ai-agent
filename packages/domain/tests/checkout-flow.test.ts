@@ -1,6 +1,8 @@
 import {
+  createCheckoutAgentTools,
   createCheckoutFlow,
   type CheckoutDraft,
+  type CheckoutFlow,
   type CheckoutDraftRepository
 } from '../src/index.js';
 import { describe, expect, it } from 'vitest';
@@ -81,5 +83,48 @@ describe('checkout flow', () => {
         phone: '0900000000'
       })
     ).rejects.toThrow('Expected checkout state: collecting_phone');
+  });
+
+  it('binds checkout tools to the persisted conversation', async () => {
+    const received: unknown[] = [];
+    const flow: CheckoutFlow = {
+      async start() {
+        throw new Error('not used');
+      },
+      async setRecipientName() {
+        throw new Error('not used');
+      },
+      async setPhone(input) {
+        received.push(input);
+        return {
+          conversationId,
+          version: 2,
+          state: 'collecting_address',
+          recipientName: 'Lan',
+          phone: '0900000000',
+          address: null,
+          paymentMethod: null
+        };
+      },
+      async setAddress() {
+        throw new Error('not used');
+      },
+      async setPaymentMethod() {
+        throw new Error('not used');
+      }
+    };
+    const tools = createCheckoutAgentTools({ checkout: flow, conversationId });
+    const phone = tools.find((tool) => tool.name === 'checkout.setPhone');
+    if (!phone) throw new Error('Phone tool was not created');
+
+    await phone.execute({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 1,
+      phone: '0900000000'
+    });
+
+    expect(received).toEqual([
+      { conversationId, expectedVersion: 1, phone: '0900000000' }
+    ]);
   });
 });
