@@ -15,6 +15,12 @@ export {
   type CheckoutSnapshot
 } from './checkout.js';
 export {
+  CheckoutDraftSchema,
+  createCheckoutFlow,
+  type CheckoutDraft,
+  type CheckoutDraftRepository
+} from './checkout-flow.js';
+export {
   createOrderService,
   type ConfirmedOrderRepository,
   type OrderService
