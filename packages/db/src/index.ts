@@ -1,6 +1,7 @@
 export { InMemoryCommerceRepository } from './in-memory.js';
 export { PostgresCatalogRepository } from './catalog-postgres.js';
 export { PostgresCartRepository } from './cart-postgres.js';
+export { PostgresCheckoutDraftRepository } from './checkout-draft-postgres.js';
 export { PostgresOrderRepository } from './order-postgres.js';
 export { PostgresHandoverRepository } from './handover-postgres.js';
 export { PostgresAgentRunRepository } from './agent-run-postgres.js';
