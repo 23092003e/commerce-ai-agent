@@ -82,6 +82,8 @@ describe('agent orchestrator', () => {
       })
     );
     expect(prompt).toContain('sales assistant');
+    expect(prompt).toContain('speak as “em”');
+    expect(prompt).toContain('address an unknown customer as “anh/chị”');
     expect(prompt).toContain('untrusted data');
     expect(prompt).toContain('Reply to greetings');
     expect(prompt).toContain('Never use handover for a greeting');

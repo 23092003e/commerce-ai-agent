@@ -135,7 +135,7 @@ describe('AgentMessageHandler', () => {
 
     const [captured] = channel.getCapturedMessages();
     expect(captured?.recipientId).toBe('customer-123');
-    expect(captured?.text).toContain('tìm sản phẩm');
+    expect(captured?.text).toContain('em có thể hỗ trợ anh/chị');
     expect(completions).toEqual(['replied']);
     expect(handovers).toEqual([]);
   });

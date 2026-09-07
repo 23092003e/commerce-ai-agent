@@ -58,7 +58,7 @@ const GENERAL_CAPABILITY_QUESTIONS = new Set([
   'bạn làm được gì?'
 ]);
 const GENERAL_CAPABILITY_REPLY =
-  'Chào bạn! Tôi có thể giúp bạn tìm sản phẩm, kiểm tra thông tin sản phẩm và hỗ trợ đặt hàng. Bạn đang quan tâm sản phẩm nào ạ?';
+  'Dạ em có thể hỗ trợ anh/chị tìm sản phẩm, kiểm tra thông tin và đặt hàng. Anh/chị đang quan tâm sản phẩm nào để em tư vấn kỹ hơn ạ?';
 
 function canSendAutomatedReply(timestamp: number, now = Date.now()): boolean {
   return timestamp <= now && now - timestamp <= MESSAGING_WINDOW_MS;
