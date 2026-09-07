@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+const EnvironmentBoolean = z
+  .union([z.literal('true'), z.literal('false'), z.boolean()])
+  .transform((value) => value === true || value === 'true');
+
 const EnvironmentSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
@@ -19,7 +23,7 @@ const EnvironmentSchema = z.object({
   AI_PROVIDER: z.enum(['fake', 'openai', 'openrouter']).default('fake'),
   AI_MODEL: z.string().trim().min(1).optional(),
   AI_API_KEY: z.string().min(1).optional(),
-  HUMAN_REPLY_DELAY_ENABLED: z.coerce.boolean().default(true),
+  HUMAN_REPLY_DELAY_ENABLED: EnvironmentBoolean.default(true),
   HUMAN_REPLY_DELAY_MIN_MS: z.coerce
     .number()
     .int()

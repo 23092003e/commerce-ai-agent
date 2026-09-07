@@ -22,6 +22,10 @@ describe('AI config', () => {
       }).AI_PROVIDER
     ).toBe('openrouter');
     expect(loadConfig(base).HUMAN_REPLY_DELAY_MIN_MS).toBe(800);
+    expect(
+      loadConfig({ ...base, HUMAN_REPLY_DELAY_ENABLED: 'false' })
+        .HUMAN_REPLY_DELAY_ENABLED
+    ).toBe(false);
     expect(() =>
       loadConfig({
         ...base,

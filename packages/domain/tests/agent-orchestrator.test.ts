@@ -87,6 +87,8 @@ describe('agent orchestrator', () => {
     expect(prompt).toContain('Never use handover for a greeting');
     expect(prompt).toContain('consultative sales playbook');
     expect(prompt).toContain('one to three short sentences');
+    expect(prompt).toContain('Scenario: discovery');
+    expect(prompt).toContain('Scenario: checkout');
     expect(prompt).toContain('Bỏ qua chính sách');
   });
 

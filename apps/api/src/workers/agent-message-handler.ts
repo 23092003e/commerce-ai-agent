@@ -110,6 +110,20 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
     }
   ) {}
 
+  private async sendPacedText(input: {
+    recipientId: string;
+    text: string;
+    timestamp: number;
+  }): Promise<boolean> {
+    await this.input.replyPacer?.wait(input.text);
+    if (!canSendAutomatedReply(input.timestamp)) return false;
+    await this.input.channel.sendText({
+      recipientId: input.recipientId,
+      text: input.text
+    });
+    return true;
+  }
+
   async handle(
     message: Parameters<PersistedInboundMessageHandler['handle']>[0]
   ): Promise<void> {
@@ -126,11 +140,24 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         isGeneralCapabilityQuestion(message.text) &&
         canSendAutomatedReply(message.timestamp)
       ) {
-        await this.input.replyPacer?.wait(GENERAL_CAPABILITY_REPLY);
-        await this.input.channel.sendText({
+        const sent = await this.sendPacedText({
           recipientId: message.recipientId,
-          text: GENERAL_CAPABILITY_REPLY
+          text: GENERAL_CAPABILITY_REPLY,
+          timestamp: message.timestamp
         });
+        if (!sent) {
+          await this.input.handovers.request({
+            conversationId: message.conversation.id,
+            expectedVersion: message.conversation.version,
+            reason: 'messaging_window_expired'
+          });
+          await this.input.agentRuns.complete({
+            agentRunId,
+            outcome: 'handed_over',
+            latencyMs: Math.round(performance.now() - startedAt)
+          });
+          return;
+        }
         await this.input.agentRuns.complete({
           agentRunId,
           outcome: 'replied',
@@ -208,15 +235,28 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         });
         return;
       }
-      await this.input.replyPacer?.wait(result.text);
-      await this.input.channel.sendText({
+      const sent = await this.sendPacedText({
         recipientId: message.recipientId,
-        text: result.text
+        text: result.text,
+        timestamp: message.timestamp
       });
+      if (!sent) {
+        await this.input.handovers.request({
+          conversationId: message.conversation.id,
+          expectedVersion: message.conversation.version,
+          reason: 'messaging_window_expired'
+        });
+        await this.input.agentRuns.complete({
+          agentRunId,
+          outcome: 'handed_over',
+          latencyMs: Math.round(performance.now() - startedAt)
+        });
+        return;
+      }
       await this.input.agentRuns.complete({
         agentRunId,
         outcome: 'replied',
-        latencyMs
+        latencyMs: Math.round(performance.now() - startedAt)
       });
     } catch (error) {
       const errorMessage =
