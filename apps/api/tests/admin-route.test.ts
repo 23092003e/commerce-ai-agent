@@ -87,6 +87,58 @@ describe('admin conversations route', () => {
     });
     await app.close();
   });
+
+  it('returns a redacted conversation timeline only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async getConversationMessages(id) {
+            if (id !== conversationId) return null;
+            return [
+              {
+                id: 'message-1',
+                senderType: 'customer',
+                text: 'I need a cake for Saturday.',
+                deliveryState: 'received',
+                createdAt: '2026-09-07T00:00:00.000Z'
+              }
+            ];
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/conversations/${conversationId}/messages`;
+    const denied = await app.inject({ method: 'GET', url });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({
+      messages: [
+        {
+          id: 'message-1',
+          senderType: 'customer',
+          text: 'I need a cake for Saturday.',
+          deliveryState: 'received',
+          createdAt: '2026-09-07T00:00:00.000Z'
+        }
+      ]
+    });
+    await app.close();
+  });
 });
 
 describe('admin operational data routes', () => {

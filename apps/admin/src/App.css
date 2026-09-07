@@ -161,6 +161,26 @@
   color: #e9e5dc;
   font-size: 11px;
 }
+.timeline {
+  max-height: 460px;
+  overflow-y: auto;
+}
+.message {
+  border-left: 2px solid #586554;
+  margin: 12px 0;
+  padding: 8px 12px;
+}
+.message.customer {
+  border-left-color: #c6eb47;
+}
+.message small {
+  color: #8d9888;
+  font-size: 9px;
+}
+.message p {
+  color: #dce3d6;
+  margin: 5px 0 0;
+}
 .detail mark,
 .conversation mark {
   float: right;

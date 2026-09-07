@@ -52,6 +52,13 @@ export interface AdminOperationalData {
       version: number;
     }>
   >;
+  getConversationMessages?(conversationId: string): Promise<Array<{
+    id: string;
+    senderType: string;
+    text: string | null;
+    deliveryState: string;
+    createdAt: string;
+  }> | null>;
   listOrders?(): Promise<
     Array<{
       id: string;
@@ -168,6 +175,25 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!admin.data) return { conversations: [] };
       return { conversations: await admin.data.listConversations() };
     });
+    app.get(
+      '/internal/admin/conversations/:conversationId/messages',
+      async (request, reply) => {
+        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+          return reply.code(401).send({ error: 'admin_unauthorized' });
+        }
+        const params = z
+          .object({ conversationId: z.uuid() })
+          .safeParse(request.params);
+        if (!params.success)
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        const messages = await admin.data?.getConversationMessages?.(
+          params.data.conversationId
+        );
+        if (messages === undefined || messages === null)
+          return reply.code(404).send({ error: 'conversation_not_found' });
+        return { messages };
+      }
+    );
     app.get('/internal/admin/orders', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
         return reply.code(401).send({ error: 'admin_unauthorized' });

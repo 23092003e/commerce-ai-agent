@@ -8,6 +8,14 @@ export interface AdminConversationSummary {
   version: number;
 }
 
+export interface AdminConversationMessage {
+  id: string;
+  senderType: string;
+  text: string | null;
+  deliveryState: string;
+  createdAt: string;
+}
+
 export interface AdminOrderSummary {
   id: string;
   orderNumber: string;
@@ -77,6 +85,26 @@ export class PostgresAdminRepository {
        ) m ON true
        ORDER BY c.last_message_at DESC NULLS LAST, c.updated_at DESC
        LIMIT 100`
+    );
+    return result.rows;
+  }
+
+  async getConversationMessages(
+    conversationId: string
+  ): Promise<AdminConversationMessage[] | null> {
+    const exists = await this.pool.query<{ id: string }>(
+      'SELECT id FROM conversations WHERE id = $1',
+      [conversationId]
+    );
+    if (!exists.rows[0]) return null;
+    const result = await this.pool.query<AdminConversationMessage>(
+      `SELECT id, sender_type AS "senderType", text,
+              delivery_state AS "deliveryState", created_at::text AS "createdAt"
+       FROM messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC, id ASC
+       LIMIT 200`,
+      [conversationId]
     );
     return result.rows;
   }

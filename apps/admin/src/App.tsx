@@ -9,6 +9,13 @@ interface Conversation {
   lastMessage: string | null;
   version: number;
 }
+interface ConversationMessage {
+  id: string;
+  senderType: string;
+  text: string | null;
+  deliveryState: string;
+  createdAt: string;
+}
 interface Order {
   id: string;
   orderNumber: string;
@@ -92,6 +99,7 @@ export default function App() {
   );
   const [view, setView] = useState<View>('inbox');
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -212,6 +220,22 @@ export default function App() {
   useEffect(() => {
     if (token) void load();
   }, []);
+  useEffect(() => {
+    if (!token || !selected) {
+      setMessages([]);
+      return;
+    }
+    void fetchList<ConversationMessage>(
+      `/internal/admin/conversations/${selected.id}/messages`,
+      'messages'
+    )
+      .then(setMessages)
+      .catch((error: unknown) =>
+        setStatus(
+          error instanceof Error ? error.message : 'Could not load messages.'
+        )
+      );
+  }, [selected?.id]);
   const navigation: Array<{ id: View; label: string }> = [
     { id: 'inbox', label: 'Inbox' },
     { id: 'customers', label: 'Customers' },
@@ -295,14 +319,33 @@ export default function App() {
                     {selected.customer ?? 'Unknown customer'}{' '}
                     <mark>{selected.controlMode}</mark>
                   </h2>
-                  <article>
-                    <h3>Latest customer context</h3>
+                  <article className="timeline">
+                    <h3>Conversation timeline</h3>
+                    {messages.length > 0 ? (
+                      messages.map((message) => (
+                        <div
+                          className={
+                            message.senderType === 'customer'
+                              ? 'message customer'
+                              : 'message'
+                          }
+                          key={message.id}
+                        >
+                          <small>
+                            {message.senderType} ·{' '}
+                            {formatDate(message.createdAt)}
+                          </small>
+                          <p>{message.text ?? 'Attachment or event'}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p>
+                        {selected.lastMessage ??
+                          'No customer message has been recorded.'}
+                      </p>
+                    )}
                     <p>
-                      {selected.lastMessage ??
-                        'No customer message has been recorded.'}
-                    </p>
-                    <p>
-                      Version {selected.version} · actions are concurrency-safe.
+                      Version {selected.version}. Actions are concurrency-safe.
                     </p>
                   </article>
                   <div className="actions">
