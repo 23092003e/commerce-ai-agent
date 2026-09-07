@@ -21,5 +21,13 @@ describe('AI config', () => {
         AI_API_KEY: 'key'
       }).AI_PROVIDER
     ).toBe('openrouter');
+    expect(loadConfig(base).HUMAN_REPLY_DELAY_MIN_MS).toBe(800);
+    expect(() =>
+      loadConfig({
+        ...base,
+        HUMAN_REPLY_DELAY_MIN_MS: '900',
+        HUMAN_REPLY_DELAY_MAX_MS: '800'
+      })
+    ).toThrow('HUMAN_REPLY_DELAY_MAX_MS');
   });
 });

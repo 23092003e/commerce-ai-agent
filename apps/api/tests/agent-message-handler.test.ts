@@ -8,6 +8,7 @@ import {
 import { FakeMessagingChannel } from '@fanpage/meta';
 import { describe, expect, it } from 'vitest';
 import { AgentMessageHandler } from '../src/workers/agent-message-handler.js';
+import type { ReplyPacer } from '../src/workers/reply-pacer.js';
 
 const conversation = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -18,7 +19,10 @@ const conversation = {
   version: 2
 };
 
-function createHarness(decisions: unknown[]) {
+function createHarness(
+  decisions: unknown[],
+  options: { replyPacer?: ReplyPacer } = {}
+) {
   const channel = new FakeMessagingChannel();
   const completions: string[] = [];
   const handovers: string[] = [];
@@ -45,7 +49,8 @@ function createHarness(decisions: unknown[]) {
     channel,
     modelProvider: 'fake',
     modelName: 'fake',
-    promptVersion: 'test.v1'
+    promptVersion: 'test.v1',
+    replyPacer: options.replyPacer
   });
   return { channel, completions, handovers, handler };
 }
@@ -72,6 +77,25 @@ describe('AgentMessageHandler', () => {
     ]);
     expect(completions).toEqual(['replied']);
     expect(handovers).toEqual([]);
+  });
+
+  it('paces a reply before sending it to the customer', async () => {
+    const pacedTexts: string[] = [];
+    const { handler, channel } = createHarness(
+      [{ type: 'reply', text: 'Chào bạn!', evidenceChunkIds: [] }],
+      {
+        replyPacer: {
+          async wait(text) {
+            pacedTexts.push(text);
+          }
+        }
+      }
+    );
+
+    await handler.handle(message);
+
+    expect(pacedTexts).toEqual(['Chào bạn!']);
+    expect(channel.getCapturedMessages()).toHaveLength(1);
   });
 
   it('transitions to human control when the agent requests handover', async () => {

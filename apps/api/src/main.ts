@@ -29,6 +29,7 @@ import { buildApp } from './app.js';
 import { createWebhookIngestionService } from './services/webhook-ingestion.js';
 import { AgentMessageHandler } from './workers/agent-message-handler.js';
 import { InboundMessageWorker } from './workers/inbound-message-worker.js';
+import { createHumanReplyPacer } from './workers/reply-pacer.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -65,6 +66,12 @@ const knowledge = createKnowledgeService(
 );
 const cart = createCartService({ catalog, repository: cartRepository });
 const checkout = createCheckoutFlow(checkoutDraftRepository);
+const replyPacer = createHumanReplyPacer({
+  enabled: config.HUMAN_REPLY_DELAY_ENABLED,
+  minDelayMs: config.HUMAN_REPLY_DELAY_MIN_MS,
+  maxDelayMs: config.HUMAN_REPLY_DELAY_MAX_MS,
+  charactersPerSecond: config.HUMAN_REPLY_TYPING_CHARS_PER_SECOND
+});
 
 function createDecisionProvider(): StructuredDecisionProvider {
   if (config.AI_PROVIDER === 'fake') {
@@ -88,10 +95,9 @@ function createDecisionProvider(): StructuredDecisionProvider {
   return createOpenAiDecisionProvider({
     apiKey: config.AI_API_KEY,
     model: config.AI_MODEL,
-    baseUrl:
-      config.AI_PROVIDER === 'openrouter'
-        ? 'https://openrouter.ai/api/v1'
-        : undefined
+    ...(config.AI_PROVIDER === 'openrouter'
+      ? { baseUrl: 'https://openrouter.ai/api/v1' }
+      : {})
   });
 }
 
@@ -109,6 +115,7 @@ const inboundWorker = new InboundMessageWorker(
     modelProvider: config.AI_PROVIDER,
     modelName: config.AI_MODEL ?? 'fake',
     promptVersion: SALES_SYSTEM_PROMPT_VERSION,
+    replyPacer,
     logger
   })
 );

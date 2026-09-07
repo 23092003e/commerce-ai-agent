@@ -12,6 +12,7 @@ import {
 } from '@fanpage/domain';
 import type { MessagingChannel } from '@fanpage/meta';
 import type { PersistedInboundMessageHandler } from './inbound-message-worker.js';
+import type { ReplyPacer } from './reply-pacer.js';
 
 interface AgentRunStore {
   start(input: {
@@ -104,6 +105,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       modelProvider: string;
       modelName: string;
       promptVersion: string;
+      replyPacer?: ReplyPacer;
       logger?: ErrorLogger;
     }
   ) {}
@@ -124,6 +126,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         isGeneralCapabilityQuestion(message.text) &&
         canSendAutomatedReply(message.timestamp)
       ) {
+        await this.input.replyPacer?.wait(GENERAL_CAPABILITY_REPLY);
         await this.input.channel.sendText({
           recipientId: message.recipientId,
           text: GENERAL_CAPABILITY_REPLY
@@ -205,6 +208,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         });
         return;
       }
+      await this.input.replyPacer?.wait(result.text);
       await this.input.channel.sendText({
         recipientId: message.recipientId,
         text: result.text

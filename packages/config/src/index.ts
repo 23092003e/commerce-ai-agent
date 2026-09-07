@@ -19,6 +19,24 @@ const EnvironmentSchema = z.object({
   AI_PROVIDER: z.enum(['fake', 'openai', 'openrouter']).default('fake'),
   AI_MODEL: z.string().trim().min(1).optional(),
   AI_API_KEY: z.string().min(1).optional(),
+  HUMAN_REPLY_DELAY_ENABLED: z.coerce.boolean().default(true),
+  HUMAN_REPLY_DELAY_MIN_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(10_000)
+    .default(800),
+  HUMAN_REPLY_DELAY_MAX_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(10_000)
+    .default(2600),
+  HUMAN_REPLY_TYPING_CHARS_PER_SECOND: z.coerce
+    .number()
+    .positive()
+    .max(100)
+    .default(20),
   ADMIN_AUTH_SECRET: z.string().min(32).optional(),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -40,6 +58,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
   ) {
     throw new Error(
       'AI_MODEL and AI_API_KEY are required for a real AI provider'
+    );
+  }
+  if (config.HUMAN_REPLY_DELAY_MAX_MS < config.HUMAN_REPLY_DELAY_MIN_MS) {
+    throw new Error(
+      'HUMAN_REPLY_DELAY_MAX_MS must be at least HUMAN_REPLY_DELAY_MIN_MS'
     );
   }
   return config;

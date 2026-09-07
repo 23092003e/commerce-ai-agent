@@ -1,6 +1,6 @@
 # Facebook Fanpage AI Sales Agent
 
-Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. The current milestone implements Phases 0–4: secure Meta webhook ingress, durable event storage, ordered/idempotent processing, optimistic conversation updates, explicit AI/human control state, a relational demo catalog, and evidence-backed Knowledge RAG with Postgres FTS, pgvector retrieval, and Reciprocal Rank Fusion. It deliberately contains no AI sales logic yet.
+Production-oriented TypeScript monorepo for a Facebook Messenger commerce agent. It implements secure Meta webhook ingress, durable ordered/idempotent processing, bounded AI sales decisions, catalog and Knowledge RAG tools, checkout collection, and explicit AI/human control state.
 
 ## Prerequisites
 
@@ -28,6 +28,12 @@ GET  /ready
 GET  /webhooks/meta
 POST /webhooks/meta
 ```
+
+## Conversational sales behaviour
+
+Inbound replies are paced by message length to feel natural: 0.8–2.6 seconds by default. This uses an asynchronous timer, not a busy wait, and is configurable via `HUMAN_REPLY_DELAY_*` variables. Set `HUMAN_REPLY_DELAY_ENABLED=false` for immediate replies during local testing.
+
+The sales prompt follows a concise consultative playbook: greet and qualify one need at a time, recommend only verified options, handle objections with evidence, and finish with a low-pressure next step. Price, inventory, shipping, policy, and order claims must come from the relevant tool result.
 
 Send the checked-in Messenger fixture through the real local HTTP/queue/worker pipeline:
 
