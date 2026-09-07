@@ -88,3 +88,163 @@ describe('admin conversations route', () => {
     await app.close();
   });
 });
+
+describe('admin operational data routes', () => {
+  it('exposes only approved operational summaries to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async listOrders() {
+            return [
+              {
+                id: 'order-1',
+                orderNumber: 'ORD-1001',
+                customer: 'Lan',
+                status: 'confirmed',
+                total: '450000',
+                currency: 'VND',
+                createdAt: '2026-09-07T00:00:00.000Z'
+              }
+            ];
+          },
+          async listProducts() {
+            return [
+              {
+                id: 'product-1',
+                name: 'Signature Cake',
+                sku: 'CAKE-001',
+                status: 'active',
+                price: '450000',
+                currency: 'VND',
+                variantCount: 2,
+                availableInventory: 8
+              }
+            ];
+          },
+          async listCustomers() {
+            return [
+              {
+                id: 'customer-1',
+                name: 'Lan',
+                phone: '***1234',
+                email: null,
+                conversationCount: 1
+              }
+            ];
+          },
+          async listKnowledgeDocuments() {
+            return [
+              {
+                id: 'knowledge-1',
+                title: 'Shipping policy',
+                sourceType: 'policy',
+                status: 'active',
+                topics: ['shipping'],
+                updatedAt: '2026-09-07T00:00:00.000Z'
+              }
+            ];
+          },
+          async listAgentRuns() {
+            return [
+              {
+                id: 'run-1',
+                conversationId,
+                customer: 'Lan',
+                model: 'deepseek',
+                status: 'completed',
+                outcome: 'replied',
+                latencyMs: 650,
+                toolCallCount: 2,
+                startedAt: '2026-09-07T00:00:00.000Z'
+              }
+            ];
+          }
+        }
+      }
+    });
+
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/orders'
+    });
+    expect(denied.statusCode).toBe(401);
+
+    const expected = [
+      ['/internal/admin/orders', 'ORD-1001'],
+      ['/internal/admin/products', 'Signature Cake'],
+      ['/internal/admin/customers', '***1234'],
+      ['/internal/admin/knowledge', 'Shipping policy'],
+      ['/internal/admin/agent-runs', 'deepseek']
+    ] as const;
+    for (const [url, expectedValue] of expected) {
+      const response = await app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${secret}` }
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(expectedValue);
+    }
+    await app.close();
+  });
+
+  it('accepts an authorized knowledge re-index request', async () => {
+    const repository = new InMemoryCommerceRepository();
+    let input: unknown;
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        knowledge: {
+          async ingest(value) {
+            input = value;
+            return { type: 'created', documentId: 'knowledge-1' };
+          }
+        }
+      }
+    });
+    const payload = {
+      title: 'Shipping policy',
+      sourceType: 'policy',
+      content: 'Orders are delivered in two business days.',
+      topics: ['shipping']
+    };
+    const denied = await app.inject({
+      method: 'POST',
+      url: '/internal/admin/knowledge',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify(payload)
+    });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/internal/admin/knowledge',
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'content-type': 'application/json'
+      },
+      payload: JSON.stringify(payload)
+    });
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json()).toEqual({
+      type: 'created',
+      documentId: 'knowledge-1'
+    });
+    expect(input).toEqual(payload);
+    await app.close();
+  });
+});

@@ -26,9 +26,87 @@ const TestOutboundSchema = z.object({
   text: z.string().min(1).max(2_000)
 });
 
+const AdminKnowledgeIngestionSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    sourceType: z.enum(['policy', 'faq', 'guide', 'script']),
+    sourceUri: z.url().max(2_048).optional(),
+    sourceKey: z.string().trim().min(1).max(500).optional(),
+    content: z.string().trim().min(1).max(100_000),
+    topics: z.array(z.string().trim().min(1).max(100)).max(10).default([])
+  })
+  .strict();
+
 export interface ApiConfig {
   metaAppSecret: string;
   metaVerifyToken: string;
+}
+
+export interface AdminOperationalData {
+  listConversations(): Promise<
+    Array<{
+      id: string;
+      customer: string | null;
+      controlMode: 'ai' | 'human' | 'paused';
+      lastMessage: string | null;
+      version: number;
+    }>
+  >;
+  listOrders?(): Promise<
+    Array<{
+      id: string;
+      orderNumber: string;
+      customer: string | null;
+      status: string;
+      total: string;
+      currency: string;
+      createdAt: string;
+    }>
+  >;
+  listProducts?(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      sku: string | null;
+      status: string;
+      price: string;
+      currency: string;
+      variantCount: number;
+      availableInventory: number;
+    }>
+  >;
+  listCustomers?(): Promise<
+    Array<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      conversationCount: number;
+    }>
+  >;
+  listKnowledgeDocuments?(): Promise<
+    Array<{
+      id: string;
+      title: string;
+      sourceType: string;
+      status: string;
+      topics: string[];
+      updatedAt: string;
+    }>
+  >;
+  listAgentRuns?(): Promise<
+    Array<{
+      id: string;
+      conversationId: string;
+      customer: string | null;
+      model: string;
+      status: string;
+      outcome: string | null;
+      latencyMs: number | null;
+      toolCallCount: number;
+      startedAt: string;
+    }>
+  >;
 }
 
 export interface BuildAppOptions {
@@ -41,15 +119,13 @@ export interface BuildAppOptions {
   admin?: {
     secret?: string;
     repository: CommerceRepository;
-    data?: {
-      listConversations(): Promise<
-        Array<{
-          id: string;
-          customer: string | null;
-          controlMode: 'ai' | 'human' | 'paused';
-          lastMessage: string | null;
-          version: number;
-        }>
+    data?: AdminOperationalData;
+    knowledge?: {
+      ingest(
+        input: unknown
+      ): Promise<
+        | { type: 'created'; documentId: string }
+        | { type: 'duplicate'; documentId: string }
       >;
     };
   };
@@ -91,6 +167,58 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       }
       if (!admin.data) return { conversations: [] };
       return { conversations: await admin.data.listConversations() };
+    });
+    app.get('/internal/admin/orders', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      return { orders: (await admin.data?.listOrders?.()) ?? [] };
+    });
+    app.get('/internal/admin/products', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      return { products: (await admin.data?.listProducts?.()) ?? [] };
+    });
+    app.get('/internal/admin/customers', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      return { customers: (await admin.data?.listCustomers?.()) ?? [] };
+    });
+    app.get('/internal/admin/knowledge', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      return {
+        documents: (await admin.data?.listKnowledgeDocuments?.()) ?? []
+      };
+    });
+    app.post('/internal/admin/knowledge', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      if (!admin.knowledge)
+        return reply.code(501).send({ error: 'knowledge_unavailable' });
+      let requestBody: unknown;
+      try {
+        requestBody = Buffer.isBuffer(request.body)
+          ? (JSON.parse(request.body.toString('utf8')) as unknown)
+          : request.body;
+      } catch {
+        return reply.code(400).send({ error: 'invalid_knowledge_request' });
+      }
+      const body = AdminKnowledgeIngestionSchema.safeParse(requestBody);
+      if (!body.success)
+        return reply.code(400).send({ error: 'invalid_knowledge_request' });
+      const result = await admin.knowledge.ingest(body.data);
+      return reply.code(result.type === 'created' ? 201 : 200).send(result);
+    });
+    app.get('/internal/admin/agent-runs', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      return { runs: (await admin.data?.listAgentRuns?.()) ?? [] };
     });
     app.post(
       '/internal/admin/conversations/:conversationId/control',

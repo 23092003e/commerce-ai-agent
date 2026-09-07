@@ -28,9 +28,23 @@
   font-style: normal;
 }
 .rail nav {
-  line-height: 2.4;
+  display: grid;
+  gap: 4px;
+}
+.nav-item {
+  background: transparent;
+  border: 0;
   color: #aeb6a7;
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
+  padding: 8px 10px;
+  text-align: left;
+}
+.nav-item:hover,
+.nav-item.active {
+  background: #232d21;
+  color: #c6eb47;
 }
 .rail small {
   margin-top: auto;
@@ -164,6 +178,78 @@
 .actions button:nth-child(3) {
   background: #323c30;
   color: #e9e5dc;
+}
+.table-panel {
+  border: 1px solid #394236;
+  background: #151b15;
+  padding: 20px;
+  overflow-x: auto;
+}
+.knowledge-form {
+  border: 1px solid #394236;
+  background: #151b15;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 20px;
+}
+.knowledge-form h2 {
+  font-size: 24px;
+  margin: 0;
+}
+.knowledge-form p {
+  color: #8d9888;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 0 0 4px;
+}
+.knowledge-form input,
+.knowledge-form textarea {
+  background: #0c100c;
+  border: 1px solid #4f5b4a;
+  box-sizing: border-box;
+  color: #e9e5dc;
+  font: inherit;
+  font-size: 11px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+.knowledge-form button {
+  justify-self: start;
+}
+.table-panel h2 {
+  font-size: 26px;
+  margin-top: 0;
+}
+table {
+  border-collapse: collapse;
+  min-width: 720px;
+  width: 100%;
+}
+th,
+td {
+  border-bottom: 1px solid #30392e;
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 11px;
+  white-space: nowrap;
+}
+th {
+  color: #8d9888;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+td mark {
+  background: transparent;
+  color: #c6eb47;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.empty {
+  color: #8d9888;
+  font-size: 12px;
 }
 @media (max-width: 800px) {
   .ops-shell {
