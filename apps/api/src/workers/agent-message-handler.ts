@@ -10,7 +10,7 @@ import {
   type KnowledgeService,
   type StructuredDecisionProvider
 } from '@fanpage/domain';
-import type { MessagingChannel } from '@fanpage/meta';
+import { MetaChannelError, type MessagingChannel } from '@fanpage/meta';
 import type { PersistedInboundMessageHandler } from './inbound-message-worker.js';
 import type { ReplyPacer } from './reply-pacer.js';
 
@@ -293,6 +293,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         latencyMs: Math.round(performance.now() - startedAt),
         error: errorMessage.slice(0, 500)
       });
+      if (error instanceof MetaChannelError && error.retryable) throw error;
     }
   }
 }

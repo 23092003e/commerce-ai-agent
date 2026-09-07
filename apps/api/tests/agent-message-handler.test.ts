@@ -5,7 +5,7 @@ import {
   type CheckoutFlow,
   type KnowledgeService
 } from '@fanpage/domain';
-import { FakeMessagingChannel } from '@fanpage/meta';
+import { FakeMessagingChannel, MetaChannelError } from '@fanpage/meta';
 import { describe, expect, it } from 'vitest';
 import { AgentMessageHandler } from '../src/workers/agent-message-handler.js';
 import type { ReplyPacer } from '../src/workers/reply-pacer.js';
@@ -209,5 +209,43 @@ describe('AgentMessageHandler', () => {
 
     expect(errors).toEqual(['Agent message handling failed']);
     expect(failureErrors).toEqual(['transport unavailable']);
+  });
+
+  it('rethrows a retryable Meta send failure for the durable queue', async () => {
+    const handler = new AgentMessageHandler({
+      provider: createScriptedDecisionProvider([
+        { type: 'reply', text: 'retry me', evidenceChunkIds: [] }
+      ]),
+      catalog: {} as CatalogService,
+      knowledge: {} as KnowledgeService,
+      cart: {} as CartService,
+      checkout: {} as CheckoutFlow,
+      agentRuns: {
+        async start() {
+          return '44444444-4444-4444-8444-444444444444';
+        },
+        async recordToolCall() {},
+        async complete() {}
+      },
+      handovers: { async request() {} },
+      channel: {
+        async sendText() {
+          throw new MetaChannelError(
+            'temporary outage',
+            'server_error',
+            true,
+            503
+          );
+        }
+      },
+      modelProvider: 'fake',
+      modelName: 'fake',
+      promptVersion: 'test.v1'
+    });
+
+    await expect(handler.handle(message)).rejects.toMatchObject({
+      code: 'server_error',
+      retryable: true
+    });
   });
 });
