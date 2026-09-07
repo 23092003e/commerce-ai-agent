@@ -47,6 +47,8 @@ describe('OpenAI decision provider', () => {
     expect(requestUrl).toBe('https://openrouter.ai/api/v1/responses');
     expect(requestBody).toMatchObject({
       temperature: 0.2,
+      max_output_tokens: 1_000,
+      reasoning: { enabled: false },
       text: { format: { type: 'json_schema', strict: true } }
     });
   });
