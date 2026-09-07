@@ -70,6 +70,23 @@ export interface AdminOperationalData {
       createdAt: string;
     }>
   >;
+  getOrderDetail?(orderId: string): Promise<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    recipientName: string;
+    paymentMethod: string;
+    paymentStatus: string;
+    total: string;
+    currency: string;
+    items: Array<{
+      sku: string;
+      name: string;
+      variant: string;
+      quantity: number;
+      lineTotal: string;
+    }>;
+  } | null>;
   listProducts?(): Promise<
     Array<{
       id: string;
@@ -199,6 +216,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       }
       return { orders: (await admin.data?.listOrders?.()) ?? [] };
+    });
+    app.get('/internal/admin/orders/:orderId', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      const params = z.object({ orderId: z.uuid() }).safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_admin_request' });
+      const order = await admin.data?.getOrderDetail?.(params.data.orderId);
+      if (!order) return reply.code(404).send({ error: 'order_not_found' });
+      return { order };
     });
     app.get('/internal/admin/products', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {

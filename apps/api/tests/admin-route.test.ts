@@ -299,4 +299,56 @@ describe('admin operational data routes', () => {
     expect(input).toEqual(payload);
     await app.close();
   });
+
+  it('returns an authorized order detail with immutable item snapshots', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async getOrderDetail(orderId) {
+            if (orderId !== '22222222-2222-4222-8222-222222222222') return null;
+            return {
+              id: '22222222-2222-4222-8222-222222222222',
+              orderNumber: 'ORD-1001',
+              status: 'confirmed',
+              recipientName: 'Lan',
+              paymentMethod: 'cod',
+              paymentStatus: 'unpaid',
+              total: '450000',
+              currency: 'VND',
+              items: [
+                {
+                  sku: 'CAKE-001',
+                  name: 'Signature Cake',
+                  variant: 'Large',
+                  quantity: 1,
+                  lineTotal: '450000'
+                }
+              ]
+            };
+          }
+        }
+      }
+    });
+    const url = '/internal/admin/orders/22222222-2222-4222-8222-222222222222';
+    const denied = await app.inject({ method: 'GET', url });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('Signature Cake');
+    await app.close();
+  });
 });

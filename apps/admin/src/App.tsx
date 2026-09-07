@@ -25,6 +25,23 @@ interface Order {
   currency: string;
   createdAt: string;
 }
+interface OrderDetail {
+  id: string;
+  orderNumber: string;
+  status: string;
+  recipientName: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  total: string;
+  currency: string;
+  items: Array<{
+    sku: string;
+    name: string;
+    variant: string;
+    quantity: number;
+    lineTotal: string;
+  }>;
+}
 interface Product {
   id: string;
   name: string;
@@ -92,6 +109,15 @@ function formatMoney(total: string, currency: string): string {
       )
     : `${total} ${currency}`;
 }
+function isOrderDetail(value: unknown): value is { order: OrderDetail } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'order' in value &&
+    typeof value.order === 'object' &&
+    value.order !== null
+  );
+}
 
 export default function App() {
   const [token, setToken] = useState(
@@ -101,6 +127,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -216,6 +243,21 @@ export default function App() {
     );
     setKnowledgeContent('');
     await load();
+  }
+  async function loadOrderDetail(orderId: string) {
+    const response = await fetch(`${apiUrl}/internal/admin/orders/${orderId}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      setStatus('Could not load order detail.');
+      return;
+    }
+    const data: unknown = await response.json();
+    if (!isOrderDetail(data)) {
+      setStatus('Admin API returned invalid order detail.');
+      return;
+    }
+    setOrderDetail(data.order);
   }
   useEffect(() => {
     if (token) void load();
@@ -367,18 +409,47 @@ export default function App() {
           </div>
         )}
         {view === 'orders' && (
-          <DataTable
-            title="Recent confirmed and pending orders"
-            headers={['Order', 'Customer', 'Status', 'Total', 'Created']}
-            rows={orders.map((item) => [
-              item.orderNumber,
-              item.customer ?? 'Unknown',
-              <mark>{item.status}</mark>,
-              formatMoney(item.total, item.currency),
-              formatDate(item.createdAt)
-            ])}
-            empty="No orders yet."
-          />
+          <>
+            <DataTable
+              title="Recent confirmed and pending orders"
+              headers={['Order', 'Customer', 'Status', 'Total', 'Created']}
+              rows={orders.map((item) => [
+                <button
+                  className="table-button"
+                  onClick={() => void loadOrderDetail(item.id)}
+                >
+                  {item.orderNumber}
+                </button>,
+                item.customer ?? 'Unknown',
+                <mark>{item.status}</mark>,
+                formatMoney(item.total, item.currency),
+                formatDate(item.createdAt)
+              ])}
+              empty="No orders yet."
+            />
+            {orderDetail && (
+              <section className="order-detail">
+                <h2>
+                  {orderDetail.orderNumber} <mark>{orderDetail.status}</mark>
+                </h2>
+                <p>
+                  {orderDetail.recipientName} · {orderDetail.paymentMethod} ·{' '}
+                  {orderDetail.paymentStatus}
+                </p>
+                <ul>
+                  {orderDetail.items.map((item) => (
+                    <li key={`${item.sku}-${item.variant}`}>
+                      {item.name} ({item.variant}) × {item.quantity} —{' '}
+                      {formatMoney(item.lineTotal, orderDetail.currency)}
+                    </li>
+                  ))}
+                </ul>
+                <strong>
+                  Total: {formatMoney(orderDetail.total, orderDetail.currency)}
+                </strong>
+              </section>
+            )}
+          </>
         )}
         {view === 'products' && (
           <DataTable

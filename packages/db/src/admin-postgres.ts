@@ -26,6 +26,24 @@ export interface AdminOrderSummary {
   createdAt: string;
 }
 
+export interface AdminOrderDetail {
+  id: string;
+  orderNumber: string;
+  status: string;
+  recipientName: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  total: string;
+  currency: string;
+  items: Array<{
+    sku: string;
+    name: string;
+    variant: string;
+    quantity: number;
+    lineTotal: string;
+  }>;
+}
+
 export interface AdminProductSummary {
   id: string;
   name: string;
@@ -121,6 +139,25 @@ export class PostgresAdminRepository {
        LIMIT 100`
     );
     return result.rows;
+  }
+
+  async getOrderDetail(orderId: string): Promise<AdminOrderDetail | null> {
+    const order = await this.pool.query<Omit<AdminOrderDetail, 'items'>>(
+      `SELECT id, order_number AS "orderNumber", status,
+              recipient_name AS "recipientName", payment_method AS "paymentMethod",
+              payment_status AS "paymentStatus", total::text AS total, currency
+       FROM orders WHERE id = $1`,
+      [orderId]
+    );
+    const row = order.rows[0];
+    if (!row) return null;
+    const items = await this.pool.query<AdminOrderDetail['items'][number]>(
+      `SELECT sku_snapshot AS sku, product_name_snapshot AS name,
+              variant_name_snapshot AS variant, quantity, line_total::text AS "lineTotal"
+       FROM order_items WHERE order_id = $1 ORDER BY id`,
+      [orderId]
+    );
+    return { ...row, items: items.rows };
   }
 
   async listProducts(): Promise<AdminProductSummary[]> {
