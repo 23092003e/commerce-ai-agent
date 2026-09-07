@@ -1,34 +1,88 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
-const rows = [
-  {
-    id: 'C-1042',
-    customer: 'Nguyễn Lan',
-    state: 'AI',
-    note: 'Hỏi áo polo đen, size L'
-  },
-  {
-    id: 'C-1041',
-    customer: 'Trần Minh',
-    state: 'HUMAN',
-    note: 'Yêu cầu tư vấn thanh toán'
-  },
-  {
-    id: 'C-1039',
-    customer: 'Lê Anh',
-    state: 'HANDOVER',
-    note: 'Không đủ evidence chính sách'
-  }
-];
-function App() {
-  const [selected, setSelected] = useState(rows[0]);
-  const [mode, setMode] = useState(selected.state);
+
+interface Conversation {
+  id: string;
+  customer: string | null;
+  controlMode: 'ai' | 'human' | 'paused';
+  lastMessage: string | null;
+  version: number;
+}
+const apiUrl = 'http://127.0.0.1:3000';
+
+function isConversationList(
+  value: unknown
+): value is { conversations: Conversation[] } {
   return (
-    <main>
-      <aside>
-        <b>Fanpage Sales</b>
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { conversations?: unknown }).conversations)
+  );
+}
+
+export default function App() {
+  const [token, setToken] = useState(
+    () => localStorage.getItem('admin-token') ?? ''
+  );
+  const [items, setItems] = useState<Conversation[]>([]);
+  const [selected, setSelected] = useState<Conversation | null>(null);
+  const [status, setStatus] = useState('Enter the admin token to connect.');
+  async function load() {
+    localStorage.setItem('admin-token', token);
+    const response = await fetch(`${apiUrl}/internal/admin/conversations`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    if (!response.ok)
+      return setStatus(
+        response.status === 401
+          ? 'Invalid admin token.'
+          : 'Could not load conversations.'
+      );
+    const data: unknown = await response.json();
+    if (!isConversationList(data))
+      return setStatus('Admin API returned invalid data.');
+    setItems(data.conversations);
+    setSelected(
+      (current) =>
+        data.conversations.find((item) => item.id === current?.id) ??
+        data.conversations[0]
+    );
+    setStatus(`${String(data.conversations.length)} conversations loaded.`);
+  }
+  async function setMode(controlMode: Conversation['controlMode']) {
+    if (!selected) return;
+    const response = await fetch(
+      `${apiUrl}/internal/admin/conversations/${selected.id}/control`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ expectedVersion: selected.version, controlMode })
+      }
+    );
+    if (!response.ok)
+      return setStatus(
+        response.status === 409
+          ? 'Conversation changed elsewhere. Refresh first.'
+          : 'Control update failed.'
+      );
+    await load();
+  }
+  useEffect(() => {
+    if (token) void load();
+  }, []);
+  return (
+    <main className="ops-shell">
+      <aside className="rail">
+        <strong>
+          MONEXIS
+          <br />
+          <i>OPERATIONS</i>
+        </strong>
         <nav>
-          Conversations
+          Inbox
           <br />
           Customers
           <br />
@@ -38,56 +92,86 @@ function App() {
           <br />
           Agent traces
         </nav>
-        <small>Admin V1 · protected API</small>
+        <small>
+          Facebook sales desk
+          <br />
+          v1 operator console
+        </small>
       </aside>
-      <section>
+      <section className="desk">
         <header>
           <div>
-            <small>OPERATIONS</small>
+            <span>LIVE OPERATIONS</span>
             <h1>Conversation desk</h1>
           </div>
-          <button>Refresh</button>
+          <button onClick={() => void load()}>Refresh</button>
         </header>
-        <div className="grid">
-          <div className="panel">
-            <h2>Open conversations</h2>
-            {rows.map((row) => (
+        <div className="auth">
+          <input
+            aria-label="Admin token"
+            type="password"
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            placeholder="Admin bearer token"
+          />
+          <button onClick={() => void load()}>Connect</button>
+          <em>{status}</em>
+        </div>
+        <div className="workspace">
+          <div className="inbox">
+            <h2>
+              Open conversations <b>{items.length}</b>
+            </h2>
+            {items.map((item) => (
               <button
-                className="row"
-                key={row.id}
-                onClick={() => {
-                  setSelected(row);
-                  setMode(row.state);
-                }}
+                className={
+                  selected?.id === item.id
+                    ? 'conversation active'
+                    : 'conversation'
+                }
+                key={item.id}
+                onClick={() => setSelected(item)}
               >
-                <b>{row.customer}</b>
-                <span>{row.state}</span>
-                <p>{row.note}</p>
+                <span>{item.customer ?? 'Unknown customer'}</span>
+                <mark>{item.controlMode}</mark>
+                <p>{item.lastMessage ?? 'No messages yet'}</p>
               </button>
             ))}
           </div>
-          <div className="panel">
-            <small>{selected.id}</small>
-            <h2>
-              {selected.customer} <span>{mode}</span>
-            </h2>
-            <article>
-              <h3>Current context</h3>
-              <p>{selected.note}</p>
-              <p>Cart: 1 item · ₫449,000</p>
-              <p>Last action: catalog.searchProducts</p>
-            </article>
-            <button onClick={() => setMode('HUMAN')}>Take over</button>
-            <button className="secondary" onClick={() => setMode('AI')}>
-              Return to AI
-            </button>
-            <p className="hint">
-              Actions connect to the protected control API.
-            </p>
+          <div className="detail">
+            {selected ? (
+              <>
+                <span>CONVERSATION {selected.id.slice(0, 8)}</span>
+                <h2>
+                  {selected.customer ?? 'Unknown customer'}{' '}
+                  <mark>{selected.controlMode}</mark>
+                </h2>
+                <article>
+                  <h3>Latest customer context</h3>
+                  <p>
+                    {selected.lastMessage ??
+                      'No customer message has been recorded.'}
+                  </p>
+                  <p>
+                    Version {selected.version} · actions are concurrency-safe.
+                  </p>
+                </article>
+                <div className="actions">
+                  <button onClick={() => void setMode('human')}>
+                    Take over
+                  </button>
+                  <button onClick={() => void setMode('ai')}>
+                    Return to AI
+                  </button>
+                  <button onClick={() => void setMode('paused')}>Pause</button>
+                </div>
+              </>
+            ) : (
+              <p>No conversations yet.</p>
+            )}
           </div>
         </div>
       </section>
     </main>
   );
 }
-export default App;

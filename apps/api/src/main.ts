@@ -1,6 +1,7 @@
 import { loadConfig } from '@fanpage/config';
 import {
   PostgresAgentRunRepository,
+  PostgresAdminRepository,
   PostgresCartRepository,
   PostgresCatalogRepository,
   PostgresCheckoutDraftRepository,
@@ -38,6 +39,7 @@ import { createHumanReplyPacer } from './workers/reply-pacer.js';
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const repository = new PostgresCommerceRepository(config.DATABASE_URL);
+const adminRepository = new PostgresAdminRepository(config.DATABASE_URL);
 const queue = new BullMqEventJobQueue(config.REDIS_URL);
 const ingestion = createWebhookIngestionService({ repository, queue });
 function createMessagingChannel(): MessagingChannel {
@@ -150,8 +152,8 @@ const app = buildApp({
   enableTestMessagingRoutes:
     config.NODE_ENV !== 'production' && config.META_ADAPTER === 'fake',
   admin: config.ADMIN_AUTH_SECRET
-    ? { secret: config.ADMIN_AUTH_SECRET, repository }
-    : { repository },
+    ? { secret: config.ADMIN_AUTH_SECRET, repository, data: adminRepository }
+    : { repository, data: adminRepository },
   readiness: {
     async check() {
       await Promise.all([repository.ping(), queue.ping()]);
@@ -182,6 +184,7 @@ async function shutdown(signal: string): Promise<void> {
   await knowledgeRepository.close();
   await catalogRepository.close();
   await repository.close();
+  await adminRepository.close();
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

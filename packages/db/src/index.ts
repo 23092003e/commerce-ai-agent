@@ -5,6 +5,7 @@ export { PostgresCheckoutDraftRepository } from './checkout-draft-postgres.js';
 export { PostgresOrderRepository } from './order-postgres.js';
 export { PostgresHandoverRepository } from './handover-postgres.js';
 export { PostgresAgentRunRepository } from './agent-run-postgres.js';
+export { PostgresAdminRepository } from './admin-postgres.js';
 export { PostgresKnowledgeRepository } from './knowledge-postgres.js';
 export { PostgresCommerceRepository } from './postgres.js';
 export { PostgresProductReferenceStore } from './product-reference-postgres.js';

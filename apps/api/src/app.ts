@@ -38,7 +38,21 @@ export interface BuildAppOptions {
   logger?: FastifyBaseLogger;
   messagingChannel?: MessagingChannel;
   enableTestMessagingRoutes?: boolean;
-  admin?: { secret?: string; repository: CommerceRepository };
+  admin?: {
+    secret?: string;
+    repository: CommerceRepository;
+    data?: {
+      listConversations(): Promise<
+        Array<{
+          id: string;
+          customer: string | null;
+          controlMode: 'ai' | 'human' | 'paused';
+          lastMessage: string | null;
+          version: number;
+        }>
+      >;
+    };
+  };
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -71,6 +85,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.get('/health', async () => ({ status: 'ok' }));
   if (options.admin) {
     const admin = options.admin;
+    app.get('/internal/admin/conversations', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      if (!admin.data) return { conversations: [] };
+      return { conversations: await admin.data.listConversations() };
+    });
     app.post(
       '/internal/admin/conversations/:conversationId/control',
       async (request, reply) => {

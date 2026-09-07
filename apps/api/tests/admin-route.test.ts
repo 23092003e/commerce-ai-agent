@@ -34,3 +34,57 @@ describe('admin conversation control route', () => {
     await app.close();
   });
 });
+
+describe('admin conversations route', () => {
+  it('returns operational conversations only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [
+              {
+                id: conversationId,
+                customer: 'Lan',
+                controlMode: 'ai',
+                lastMessage: 'Need a cake',
+                version: 2
+              }
+            ];
+          }
+        }
+      }
+    });
+
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/conversations'
+    });
+    expect(denied.statusCode).toBe(401);
+
+    const accepted = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/conversations',
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({
+      conversations: [
+        {
+          id: conversationId,
+          customer: 'Lan',
+          controlMode: 'ai',
+          lastMessage: 'Need a cake',
+          version: 2
+        }
+      ]
+    });
+    await app.close();
+  });
+});
