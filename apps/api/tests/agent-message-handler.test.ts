@@ -2,6 +2,7 @@ import {
   createScriptedDecisionProvider,
   type CartService,
   type CatalogService,
+  type CheckoutOrderConfirmationService,
   type CheckoutFlow,
   type KnowledgeService
 } from '@fanpage/domain';
@@ -21,7 +22,10 @@ const conversation = {
 
 function createHarness(
   decisions: unknown[],
-  options: { replyPacer?: ReplyPacer } = {}
+  options: {
+    replyPacer?: ReplyPacer;
+    checkoutOrderConfirmation?: CheckoutOrderConfirmationService;
+  } = {}
 ) {
   const channel = new FakeMessagingChannel();
   const completions: string[] = [];
@@ -52,7 +56,10 @@ function createHarness(
     promptVersion: 'test.v1',
     ...(options.replyPacer === undefined
       ? {}
-      : { replyPacer: options.replyPacer })
+      : { replyPacer: options.replyPacer }),
+    ...(options.checkoutOrderConfirmation === undefined
+      ? {}
+      : { checkoutOrderConfirmation: options.checkoutOrderConfirmation })
   });
   return { channel, completions, handovers, handler };
 }
@@ -167,6 +174,26 @@ describe('AgentMessageHandler', () => {
     expect(channel.getCapturedMessages()).toEqual([]);
     expect(completions).toEqual(['handed_over']);
     expect(handovers).toEqual(['messaging_window_expired']);
+  });
+
+  it('creates an order only after explicit customer confirmation', async () => {
+    const confirmed: string[] = [];
+    const { handler, channel } = createHarness([], {
+      checkoutOrderConfirmation: {
+        async isReady() {
+          return true;
+        },
+        async confirm(conversationId) {
+          confirmed.push(conversationId);
+          return { orderId: 'order-1', orderNumber: 'ORD-TEST' };
+        }
+      }
+    });
+
+    await handler.handle({ ...message, text: 'xác nhận' });
+
+    expect(confirmed).toEqual([conversation.id]);
+    expect(channel.getCapturedMessages()[0]?.text).toContain('ORD-TEST');
   });
 
   it('records an observable error when the outbound channel fails', async () => {

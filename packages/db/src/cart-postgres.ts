@@ -1,4 +1,4 @@
-import type { Cart, CartRepository } from '@fanpage/domain';
+import type { ActiveCheckoutCart, Cart, CartRepository } from '@fanpage/domain';
 import { Pool, type PoolClient } from 'pg';
 
 interface CartRow {
@@ -135,6 +135,31 @@ export class PostgresCartRepository implements CartRepository {
       [input.cartId, input.variantId]
     );
     if (result.rowCount !== 1) throw new Error('Cart line was not found');
+  }
+  async getActiveForConversation(
+    conversationId: string
+  ): Promise<ActiveCheckoutCart | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ id: string; version: number }>(
+        `SELECT id, version FROM carts
+         WHERE conversation_id = $1 AND status = 'active'
+         FOR SHARE`,
+        [conversationId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const cart = await readCart(client, row.id);
+      return {
+        id: cart.id,
+        version: row.version,
+        currency: cart.currency,
+        subtotal: cart.subtotal,
+        total: cart.total
+      };
+    } finally {
+      client.release();
+    }
   }
   async close(): Promise<void> {
     await this.pool.end();

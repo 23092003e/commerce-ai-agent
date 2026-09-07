@@ -23,6 +23,12 @@ export {
   type CheckoutDraftRepository
 } from './checkout-flow.js';
 export {
+  createCheckoutOrderConfirmationService,
+  type ActiveCheckoutCart,
+  type ActiveCheckoutCartRepository,
+  type CheckoutOrderConfirmationService
+} from './checkout-order.js';
+export {
   createOrderService,
   type ConfirmedOrderRepository,
   type OrderService

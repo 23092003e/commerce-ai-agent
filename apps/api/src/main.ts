@@ -6,18 +6,22 @@ import {
   PostgresCheckoutDraftRepository,
   PostgresCommerceRepository,
   PostgresHandoverRepository,
-  PostgresKnowledgeRepository
+  PostgresKnowledgeRepository,
+  PostgresOrderRepository
 } from '@fanpage/db';
 import {
   createCartService,
   createCatalogService,
   createCheckoutFlow,
+  createCheckoutOrderConfirmationService,
   createDeterministicEmbeddingProvider,
   createKnowledgeService,
   createOpenAiDecisionProvider,
+  createOrderService,
   SALES_SYSTEM_PROMPT_VERSION,
   type StructuredDecisionProvider
 } from '@fanpage/domain';
+import { createHash } from 'node:crypto';
 import { createLogger } from '@fanpage/observability';
 import {
   FakeMessagingChannel,
@@ -57,6 +61,7 @@ const cartRepository = new PostgresCartRepository(config.DATABASE_URL);
 const checkoutDraftRepository = new PostgresCheckoutDraftRepository(
   config.DATABASE_URL
 );
+const orderRepository = new PostgresOrderRepository(config.DATABASE_URL);
 const handoverRepository = new PostgresHandoverRepository(config.DATABASE_URL);
 const agentRunRepository = new PostgresAgentRunRepository(config.DATABASE_URL);
 const catalog = createCatalogService(catalogRepository);
@@ -66,6 +71,19 @@ const knowledge = createKnowledgeService(
 );
 const cart = createCartService({ catalog, repository: cartRepository });
 const checkout = createCheckoutFlow(checkoutDraftRepository);
+const checkoutOrderConfirmation = createCheckoutOrderConfirmationService({
+  confirmationSecret: createHash('sha256')
+    .update(config.META_APP_SECRET)
+    .digest('hex'),
+  checkout: checkoutDraftRepository,
+  carts: cartRepository,
+  orders: createOrderService({
+    confirmationSecret: createHash('sha256')
+      .update(config.META_APP_SECRET)
+      .digest('hex'),
+    repository: orderRepository
+  })
+});
 const replyPacer = createHumanReplyPacer({
   enabled: config.HUMAN_REPLY_DELAY_ENABLED,
   minDelayMs: config.HUMAN_REPLY_DELAY_MIN_MS,
@@ -109,6 +127,7 @@ const inboundWorker = new InboundMessageWorker(
     knowledge,
     cart,
     checkout,
+    checkoutOrderConfirmation,
     agentRuns: agentRunRepository,
     handovers: handoverRepository,
     channel: messagingChannel,
@@ -159,6 +178,7 @@ async function shutdown(signal: string): Promise<void> {
   await handoverRepository.close();
   await cartRepository.close();
   await checkoutDraftRepository.close();
+  await orderRepository.close();
   await knowledgeRepository.close();
   await catalogRepository.close();
   await repository.close();

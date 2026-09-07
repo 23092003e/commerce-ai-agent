@@ -13,7 +13,8 @@ const CreateConfirmedOrderSchema = z
   .strict();
 export interface ConfirmedOrderRepository {
   createConfirmed(
-    snapshot: CheckoutSnapshot
+    snapshot: CheckoutSnapshot,
+    confirmationId: string
   ): Promise<{ orderId: string; orderNumber: string }>;
 }
 export interface OrderService {
@@ -37,7 +38,10 @@ export function createOrderService(input: {
       ) {
         throw new Error('Checkout confirmation is invalid or stale');
       }
-      return input.repository.createConfirmed(request.snapshot);
+      return input.repository.createConfirmed(
+        request.snapshot,
+        request.confirmationId
+      );
     }
   };
 }

@@ -24,11 +24,26 @@ export class PostgresOrderRepository implements ConfirmedOrderRepository {
     this.pool = new Pool({ connectionString: databaseUrl });
   }
   async createConfirmed(
-    snapshot: CheckoutSnapshot
+    snapshot: CheckoutSnapshot,
+    confirmationId: string
   ): Promise<{ orderId: string; orderNumber: string }> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        confirmationId
+      ]);
+      const existing = await client.query<{ id: string; order_number: string }>(
+        'SELECT id, order_number FROM orders WHERE confirmation_id = $1',
+        [confirmationId]
+      );
+      if (existing.rows[0]) {
+        await client.query('COMMIT');
+        return {
+          orderId: existing.rows[0].id,
+          orderNumber: existing.rows[0].order_number
+        };
+      }
       const cart = await client.query<CartLineRow>(
         `SELECT c.customer_id, c.conversation_id, c.currency, c.version, i.product_id, i.variant_id, v.sku,
                 p.name AS product_name, v.title AS variant_name, i.quantity, i.unit_price_snapshot AS unit_price
@@ -60,10 +75,11 @@ export class PostgresOrderRepository implements ConfirmedOrderRepository {
       }
       const orderNumber = `ORD-${randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
       const order = await client.query<{ id: string }>(
-        `INSERT INTO orders (order_number, customer_id, conversation_id, recipient_name, phone, address, payment_method, currency, subtotal, shipping_fee, discount_total, total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        `INSERT INTO orders (order_number, confirmation_id, customer_id, conversation_id, recipient_name, phone, address, payment_method, currency, subtotal, shipping_fee, discount_total, total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
         [
           orderNumber,
+          confirmationId,
           first.customer_id,
           first.conversation_id,
           snapshot.recipientName,

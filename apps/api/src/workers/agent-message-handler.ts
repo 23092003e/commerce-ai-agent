@@ -13,6 +13,7 @@ import {
 import { MetaChannelError, type MessagingChannel } from '@fanpage/meta';
 import type { PersistedInboundMessageHandler } from './inbound-message-worker.js';
 import type { ReplyPacer } from './reply-pacer.js';
+import type { CheckoutOrderConfirmationService } from '@fanpage/domain';
 
 interface AgentRunStore {
   start(input: {
@@ -51,6 +52,8 @@ interface ErrorLogger {
 }
 
 const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1_000;
+const EXPLICIT_ORDER_CONFIRMATION =
+  /^(xác nhận|đồng ý|chốt đơn|confirm|yes)$/iu;
 const GENERAL_CAPABILITY_QUESTIONS = new Set([
   'bạn có thể giúp gì cho tôi?',
   'bạn có thể giúp gì?',
@@ -70,6 +73,10 @@ function canSendAutomatedReply(timestamp: number, now = Date.now()): boolean {
 
 function isGeneralCapabilityQuestion(text: string): boolean {
   return GENERAL_CAPABILITY_QUESTIONS.has(text.trim().toLocaleLowerCase('vi'));
+}
+
+function isExplicitOrderConfirmation(text: string): boolean {
+  return EXPLICIT_ORDER_CONFIRMATION.test(text.trim());
 }
 
 function scopedCartTools(input: {
@@ -103,6 +110,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       knowledge: KnowledgeService;
       cart: CartService;
       checkout: CheckoutFlow;
+      checkoutOrderConfirmation?: CheckoutOrderConfirmationService;
       agentRuns: AgentRunStore;
       handovers: HandoverStore;
       channel: MessagingChannel;
@@ -140,6 +148,28 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       promptVersion: this.input.promptVersion
     });
     try {
+      if (
+        isExplicitOrderConfirmation(message.text) &&
+        this.input.checkoutOrderConfirmation &&
+        (await this.input.checkoutOrderConfirmation.isReady(
+          message.conversation.id
+        ))
+      ) {
+        const order = await this.input.checkoutOrderConfirmation.confirm(
+          message.conversation.id
+        );
+        const sent = await this.sendPacedText({
+          recipientId: message.recipientId,
+          text: `Đơn hàng ${order.orderNumber} đã được xác nhận.`,
+          timestamp: message.timestamp
+        });
+        await this.input.agentRuns.complete({
+          agentRunId,
+          outcome: sent ? 'replied' : 'handed_over',
+          latencyMs: Math.round(performance.now() - startedAt)
+        });
+        return;
+      }
       if (
         isGeneralCapabilityQuestion(message.text) &&
         canSendAutomatedReply(message.timestamp)

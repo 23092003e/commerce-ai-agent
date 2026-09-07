@@ -90,6 +90,6 @@ describe('Postgres confirmed orders', () => {
     expect(inventory.rows[0]?.available).toBe(context.available - 1);
     await expect(
       service.createConfirmed({ confirmationId, snapshot })
-    ).rejects.toThrow('stale');
+    ).resolves.toEqual(order);
   });
 });
