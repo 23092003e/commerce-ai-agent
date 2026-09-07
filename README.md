@@ -1,54 +1,54 @@
 # Facebook Fanpage AI Sales Agent
 
-Agent tư vấn bán hàng cho Facebook Fanpage bằng TypeScript. Hệ thống nhận Messenger webhook, lưu bền vững, xử lý đúng thứ tự, tra catalog/knowledge, chạy AI và trả lời theo chế độ AI hoặc nhân viên.
+A TypeScript sales-assistant service for Facebook Pages. It receives Messenger webhooks, persists each event, processes conversations in order, uses grounded catalog and knowledge tools, and replies through either an AI or human-controlled mode.
 
-> Hiện chạy end-to-end với Meta Graph API, Cloudflare Tunnel và OpenRouter. Catalog **Bánh Mây Atelier** là dữ liệu demo hư cấu, không phải dữ liệu kinh doanh thật.
+> The project is running end-to-end with the Meta Graph API, Cloudflare Tunnel, and OpenRouter. The **Banh May Atelier** catalog is fictional demonstration data, not real business data.
 
-## Kiến trúc
+## Architecture
 
 ```text
-Khách Messenger
+Messenger customer
   -> Facebook Messenger Platform
   -> Cloudflare Tunnel (HTTPS)
-  -> Fastify API: HMAC verify -> validate -> webhook_events
+  -> Fastify API: HMAC verification -> validation -> webhook_events
   -> Redis / BullMQ: durable, deduplicated event job
-  -> Inbound worker: ordered claim -> conversation/message persist
-  -> Bounded agent: catalog, knowledge, cart, checkout tools
+  -> Inbound worker: ordered claim -> conversation/message persistence
+  -> Bounded agent: catalog, knowledge, cart, and checkout tools
   -> OpenRouter / OpenAI decision provider
-  -> Meta Send API -> Khách
+  -> Meta Send API -> Messenger customer
 
-PostgreSQL giữ pages, customers, conversations, messages, agent_runs,
-tool_calls, handovers, products, variants, inventory và knowledge chunks.
+PostgreSQL stores pages, customers, conversations, messages, agent_runs,
+tool_calls, handovers, products, variants, inventory, and knowledge chunks.
 ```
 
-| Thành phần        | Trách nhiệm                                 |
-| ----------------- | ------------------------------------------- |
-| `apps/api`        | Fastify, webhook, worker composition        |
-| `packages/meta`   | HMAC, Messenger schema, fake/Graph channel  |
-| `packages/queue`  | BullMQ queue, retry và ordered processing   |
-| `packages/db`     | PostgreSQL schema, migrations, repositories |
-| `packages/domain` | Agent, catalog, cart, checkout, knowledge   |
-| `packages/config` | Validate biến môi trường bằng Zod           |
+| Component         | Responsibility                                               |
+| ----------------- | ------------------------------------------------------------ |
+| `apps/api`        | Fastify server, webhook ingress, and worker composition      |
+| `packages/meta`   | HMAC verification, Messenger schema, fake and Graph adapters |
+| `packages/queue`  | BullMQ queues, retries, and ordered processing               |
+| `packages/db`     | PostgreSQL schema, migrations, and repositories              |
+| `packages/domain` | Agent orchestration, catalog, cart, checkout, and knowledge  |
+| `packages/config` | Zod-based environment validation                             |
 
-## Luồng xử lý
+## Event flow
 
-1. Facebook gọi `POST /webhooks/meta`.
-2. API xác thực raw body bằng `X-Hub-Signature-256` và `META_APP_SECRET`.
-3. Payload được validate, dedupe trong `webhook_events` rồi enqueue với job ID xác định.
-4. Worker xử lý đúng thứ tự từng Page/customer, persist inbound message idempotent.
-5. Mode `human` hoặc `paused` chặn tự động trả lời; mode `ai` chạy agent tối đa sáu tool steps.
-6. Giá, tồn kho, chính sách và đơn hàng chỉ được nêu sau tool result tương ứng.
-7. Agent run, tool call, handover và lỗi được lưu để truy vết.
+1. Facebook calls `POST /webhooks/meta`.
+2. The API authenticates the raw body with `X-Hub-Signature-256` and `META_APP_SECRET`.
+3. The payload is validated, deduplicated in `webhook_events`, and enqueued with a deterministic job ID.
+4. The worker processes each Page/customer stream in order and persists inbound messages idempotently.
+5. `human` and `paused` modes prevent automatic replies. In `ai` mode, the agent can make up to six tool calls.
+6. Prices, stock, policies, and orders may only be stated after the relevant tool returns data.
+7. Agent runs, tool calls, handovers, and errors are persisted for traceability.
 
-## Yêu cầu
+## Requirements
 
-- Node.js 22+
-- pnpm 11.7+
-- Docker Desktop với Linux containers
-- Meta App + Page access token khi dùng Facebook thật
-- OpenRouter hoặc OpenAI API key khi dùng AI thật
+- Node.js 22 or later
+- pnpm 11.7 or later
+- Docker Desktop with Linux containers
+- A Meta App and Page access token for live Facebook messaging
+- An OpenRouter or OpenAI API key for live AI replies
 
-## Chạy local (PowerShell)
+## Run locally (PowerShell)
 
 ```powershell
 pnpm.cmd install
@@ -63,11 +63,11 @@ Invoke-RestMethod http://127.0.0.1:3000/health
 Invoke-RestMethod http://127.0.0.1:3000/ready
 ```
 
-`/health` kiểm tra process. `/ready` kiểm tra PostgreSQL và Redis; trả HTTP 503 nếu dependency chưa sẵn sàng.
+`/health` is a liveness check. `/ready` checks PostgreSQL and Redis, and returns HTTP 503 until both dependencies are ready.
 
-## Cấu hình
+## Configuration
 
-Không commit hoặc gửi `.env`, token hay API key qua chat.
+Never commit or share `.env` files, tokens, or API keys.
 
 ### Fake mode
 
@@ -81,12 +81,12 @@ AI_PROVIDER=fake
 ```env
 META_ADAPTER=graph
 META_APP_SECRET=<meta-app-secret>
-META_VERIFY_TOKEN=<random-string-it-nhat-16-ky-tu>
+META_VERIFY_TOKEN=<random-string-at-least-16-characters>
 META_PAGE_ACCESS_TOKEN=<page-access-token>
 META_GRAPH_API_VERSION=v23.0
 ```
 
-Callback cần HTTPS public, ví dụ `https://api.example.com/webhooks/meta`. Trong Meta Developers, verify callback, connect đúng Page và subscribe trường `messages`.
+The callback must be publicly accessible over HTTPS, for example `https://api.example.com/webhooks/meta`. In Meta Developers, verify the callback, connect the intended Page, and subscribe to the `messages` field.
 
 ### OpenRouter
 
@@ -96,9 +96,9 @@ AI_MODEL=deepseek/deepseek-v4-flash
 AI_API_KEY=<openrouter-api-key>
 ```
 
-Provider dùng Responses API với JSON Schema, chỉ cho phép tên tool hợp lệ. Reasoning bị tắt cho luồng sale để ưu tiên phản hồi ngắn và ổn định.
+The provider uses the Responses API with a JSON Schema response format and permits only known tool names. Reasoning is disabled in the sales flow to favour concise, predictable replies.
 
-### Nhịp phản hồi
+### Reply pacing
 
 ```env
 HUMAN_REPLY_DELAY_ENABLED=true
@@ -107,50 +107,50 @@ HUMAN_REPLY_DELAY_MAX_MS=2600
 HUMAN_REPLY_TYPING_CHARS_PER_SECOND=20
 ```
 
-Delay dùng asynchronous timer, không busy-wait. Đặt `HUMAN_REPLY_DELAY_ENABLED=false` để test phản hồi tức thì.
+Pacing uses an asynchronous timer, never a busy wait. Set `HUMAN_REPLY_DELAY_ENABLED=false` for immediate local test replies.
 
 ## Cloudflare Tunnel
 
-1. Tạo managed tunnel trong Cloudflare Zero Trust.
-2. Tạo public hostname, ví dụ `api.example.com`.
-3. Route hostname tới `http://localhost:3000`.
-4. Cài Cloudflared service để tunnel tự chạy cùng Windows.
-5. Kiểm tra `https://api.example.com/ready` trước khi verify callback trên Meta.
+1. Create a managed tunnel in Cloudflare Zero Trust.
+2. Create a public hostname, such as `api.example.com`.
+3. Route that hostname to `http://localhost:3000`.
+4. Install the Cloudflared service so the tunnel starts with Windows.
+5. Check `https://api.example.com/ready` before verifying the Meta callback.
 
-Máy chạy tunnel, API, Docker, PostgreSQL và Redis phải bật thì bot mới hoạt động.
+The machine that hosts the tunnel, API, Docker, PostgreSQL, and Redis must remain online for the bot to operate.
 
-## Catalog demo bakery
+## Bakery demonstration catalog
 
-`Bánh Mây Atelier` có 12 sản phẩm, 24 biến thể và năm nhóm: bánh sinh nhật, mousse, bánh mì thủ công, pastry, cookies/quà tặng.
+**Banh May Atelier** contains 12 products, 24 variants, and five categories: birthday cakes, mousse cakes, artisan bread, pastries, and cookies/gifts.
 
-Mỗi record có giá, khẩu phần, dị nguyên, hạn dùng, tồn kho và mô tả tư vấn. Seed archive catalog thời trang demo cũ, không xóa dữ liệu.
+Each record includes price, serving size, allergens, shelf life, stock, and sales copy. The seed archives the older demo apparel catalog; it does not delete data.
 
 ```powershell
 pnpm.cmd seed:bakery-demo
 ```
 
-Script chạy lặp lại an toàn theo slug/SKU. Chỉ dùng catalog demo để test; thay bằng dữ liệu shop được duyệt trước khi public.
+The script is safe to re-run because it keys records by slug and SKU. Use the catalog only for testing, then replace it with approved store data before going live.
 
 ## Sales playbook
 
-- Bot xưng `em`, gọi khách chưa rõ danh xưng là `anh/chị`.
-- Khám phá một nhu cầu tại một thời điểm, tư vấn tối đa ba lựa chọn.
-- Giá/tồn/giao hàng/chính sách phải gọi tool trước khi trả lời.
-- Phản đối: đồng cảm, lợi ích có căn cứ, rồi câu hỏi nhẹ nhàng.
-- Checkout: xác nhận sản phẩm, sau đó thu tên, điện thoại, địa chỉ và thanh toán lần lượt.
-- Chỉ handover khi khách yêu cầu người thật hoặc cần thao tác nhân viên.
+- The Vietnamese persona uses `em` for itself and `anh/chị` for customers whose preferred form of address is unknown.
+- Discover one need at a time and recommend at most three suitable options.
+- Query tools before discussing price, stock, delivery, or policy details.
+- Handle objections with empathy, evidence-backed benefits, then a gentle question.
+- During checkout, confirm the product before gathering name, phone number, address, and payment details in sequence.
+- Hand over only when the customer requests a person or a staff-only action is required.
 
-## Control mode
+## Control modes
 
-| Mode     | Hành vi                      |
-| -------- | ---------------------------- |
-| `ai`     | Agent có thể trả lời tự động |
-| `human`  | Chỉ nhân viên trả lời        |
-| `paused` | Tạm dừng tự động hóa         |
+| Mode     | Behaviour                            |
+| -------- | ------------------------------------ |
+| `ai`     | The agent may reply automatically.   |
+| `human`  | Only staff reply.                    |
+| `paused` | Automation is temporarily suspended. |
 
-Control change dùng optimistic version để tránh nhân viên và agent ghi đè nhau.
+Control updates use optimistic versioning to prevent staff and the agent from overwriting each other.
 
-## Kiểm thử
+## Quality checks
 
 ```powershell
 pnpm.cmd lint
@@ -160,26 +160,26 @@ pnpm.cmd test:integration
 pnpm.cmd build
 ```
 
-`test:integration` cần Postgres/Redis healthy. Dừng API local khi chạy integration test để worker thật không lấy queue job test.
+`test:integration` requires healthy Postgres and Redis. Stop the local API before running it so the live worker cannot consume test queue jobs.
 
 ```powershell
 pnpm.cmd fixture:send
 ```
 
-Fixture ký raw payload bằng local app secret. Đổi Meta message ID nếu muốn gửi lại vì ID trùng sẽ bị dedupe.
+The fixture signs the raw payload using the local app secret. Change its Meta message ID to send it again because duplicate IDs are intentionally deduplicated.
 
-## Database và giới hạn hiện tại
+## Database and current limitations
 
-Migrations trong `packages/db/migrations` là immutable; runner ghi SHA-256 vào `schema_migrations`. Phục hồi production bằng forward migration hoặc restore backup, không sửa migration đã áp dụng.
+Migrations in `packages/db/migrations` are immutable. The runner records each SHA-256 checksum in `schema_migrations`. Recover production with a forward migration or database restore; never edit an applied migration.
 
-- Admin UI hiện còn là demo.
-- Outbound delivery persistence/retry chuyên biệt chưa hoàn thiện.
-- Catalog/FAQ demo phải thay bằng dữ liệu shop thật trước khi public.
-- Meta App Review và quyền production phụ thuộc Meta/account của chủ Page.
+- The admin UI is still demonstrative.
+- Dedicated outbound-delivery persistence and retry handling are not complete.
+- Demo catalog and FAQ content must be replaced with approved store data before public launch.
+- Meta App Review and production permissions depend on the Page owner's Meta account.
 
-## Bảo mật
+## Security
 
-- Không public PostgreSQL hoặc Redis.
-- Chỉ expose callback HTTPS.
-- Xác thực HMAC trước khi parse JSON.
-- Dùng token phạm vi tối thiểu và monitor `/ready`.
+- Do not expose PostgreSQL or Redis publicly.
+- Expose only the HTTPS callback endpoint.
+- Verify the HMAC before parsing JSON.
+- Use least-privilege tokens and monitor `/ready`.
