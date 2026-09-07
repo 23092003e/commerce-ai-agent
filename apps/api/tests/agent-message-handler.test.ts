@@ -50,7 +50,9 @@ function createHarness(
     modelProvider: 'fake',
     modelName: 'fake',
     promptVersion: 'test.v1',
-    replyPacer: options.replyPacer
+    ...(options.replyPacer === undefined
+      ? {}
+      : { replyPacer: options.replyPacer })
   });
   return { channel, completions, handovers, handler };
 }
