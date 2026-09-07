@@ -33,6 +33,7 @@ interface AgentRunStore {
     agentRunId: string;
     outcome: 'replied' | 'handed_over' | 'no_action' | 'failed';
     latencyMs: number;
+    error?: string;
   }): Promise<void>;
 }
 
@@ -187,6 +188,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         latencyMs
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.input.logger?.error(
         {
           error,
@@ -196,11 +198,12 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         },
         'Agent message handling failed'
       );
-      await this.input.agentRuns.complete({
-        agentRunId,
-        outcome: 'failed',
-        latencyMs: Math.round(performance.now() - startedAt)
-      });
+        await this.input.agentRuns.complete({
+          agentRunId,
+          outcome: 'failed',
+          latencyMs: Math.round(performance.now() - startedAt),
+          error: errorMessage.slice(0, 500)
+        });
     }
   }
 }

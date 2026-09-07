@@ -118,6 +118,7 @@ describe('AgentMessageHandler', () => {
 
   it('records an observable error when the outbound channel fails', async () => {
     const errors: string[] = [];
+    const failureErrors: string[] = [];
     const handler = new AgentMessageHandler({
       provider: createScriptedDecisionProvider([
         { type: 'reply', text: 'will fail', evidenceChunkIds: [] }
@@ -131,7 +132,9 @@ describe('AgentMessageHandler', () => {
           return '44444444-4444-4444-8444-444444444444';
         },
         async recordToolCall() {},
-        async complete() {}
+        async complete(input) {
+          failureErrors.push(input.error ?? '');
+        }
       },
       handovers: { async request() {} },
       channel: {
@@ -152,5 +155,6 @@ describe('AgentMessageHandler', () => {
     await handler.handle(message);
 
     expect(errors).toEqual(['Agent message handling failed']);
+    expect(failureErrors).toEqual(['transport unavailable']);
   });
 });

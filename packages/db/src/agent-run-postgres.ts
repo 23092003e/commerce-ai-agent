@@ -19,6 +19,7 @@ export interface CompleteAgentRunInput {
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
+  error?: string;
 }
 export interface RecordToolCallInput {
   agentRunId: string;
@@ -59,6 +60,7 @@ export class PostgresAgentRunRepository {
         latencyMs: input.latencyMs,
         inputTokens: input.inputTokens,
         outputTokens: input.outputTokens,
+        error: input.error,
         completedAt: new Date()
       })
       .where(

@@ -3,12 +3,14 @@ import { createOpenAiDecisionProvider } from '../src/index.js';
 describe('OpenAI decision provider', () => {
   it('extracts a structured decision without exposing the key', async () => {
     let requestUrl = '';
+    let requestBody: unknown;
     const provider = createOpenAiDecisionProvider({
       apiKey: 'secret',
       model: 'test',
       baseUrl: 'https://openrouter.ai/api/v1/',
-      fetch: async (url) => {
+      fetch: async (url, request) => {
         requestUrl = url;
+        requestBody = JSON.parse(String(request.body));
         return {
           ok: true,
           status: 200,
@@ -40,5 +42,8 @@ describe('OpenAI decision provider', () => {
       })
     ).resolves.toEqual({ type: 'handover', reason: 'needs_staff' });
     expect(requestUrl).toBe('https://openrouter.ai/api/v1/responses');
+    expect(requestBody).toMatchObject({
+      text: { format: { type: 'json_schema', strict: true } }
+    });
   });
 });
