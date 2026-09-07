@@ -8,6 +8,22 @@ interface FetchResponse {
 }
 type FetchLike = (input: string, init: RequestInit) => Promise<FetchResponse>;
 
+const salesToolNames = [
+  'knowledge.search',
+  'catalog.searchProducts',
+  'catalog.getProduct',
+  'catalog.getVariant',
+  'catalog.checkInventory',
+  'cart.add',
+  'cart.update',
+  'cart.remove',
+  'checkout.start',
+  'checkout.setRecipientName',
+  'checkout.setPhone',
+  'checkout.setAddress',
+  'checkout.setPaymentMethod'
+] as const;
+
 const decisionOutputFormat = {
   type: 'json_schema',
   name: 'sales_decision',
@@ -28,7 +44,7 @@ const decisionOutputFormat = {
         type: 'object',
         properties: {
           type: { const: 'tool' },
-          name: { type: 'string' },
+          name: { enum: salesToolNames },
           input: {}
         },
         required: ['type', 'name', 'input'],

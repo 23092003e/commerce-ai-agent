@@ -51,5 +51,6 @@ describe('OpenAI decision provider', () => {
       reasoning: { enabled: false },
       text: { format: { type: 'json_schema', strict: true } }
     });
+    expect(JSON.stringify(requestBody)).toContain('catalog.searchProducts');
   });
 });

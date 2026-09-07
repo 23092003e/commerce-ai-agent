@@ -59,6 +59,10 @@ const GENERAL_CAPABILITY_QUESTIONS = new Set([
 ]);
 const GENERAL_CAPABILITY_REPLY =
   'Dạ em có thể hỗ trợ anh/chị tìm sản phẩm, kiểm tra thông tin và đặt hàng. Anh/chị đang quan tâm sản phẩm nào để em tư vấn kỹ hơn ạ?';
+const RECOVERABLE_MODEL_HANDOVER =
+  /need to search|no store facts|greeting|general capability/i;
+const PRODUCT_DISCOVERY_REPLY =
+  'Dạ em hỗ trợ anh/chị chọn mẫu phù hợp nhé. Anh/chị thích phong cách lịch lãm hay trẻ trung hơn, và mình dự trù tầm giá khoảng bao nhiêu để em tư vấn sát nhất ạ?';
 
 function canSendAutomatedReply(timestamp: number, now = Date.now()): boolean {
   return timestamp <= now && now - timestamp <= MESSAGING_WINDOW_MS;
@@ -210,6 +214,19 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         return;
       }
       if (result.type === 'handover') {
+        if (RECOVERABLE_MODEL_HANDOVER.test(result.reason)) {
+          const sent = await this.sendPacedText({
+            recipientId: message.recipientId,
+            text: PRODUCT_DISCOVERY_REPLY,
+            timestamp: message.timestamp
+          });
+          await this.input.agentRuns.complete({
+            agentRunId,
+            outcome: sent ? 'replied' : 'handed_over',
+            latencyMs: Math.round(performance.now() - startedAt)
+          });
+          if (sent) return;
+        }
         await this.input.handovers.request({
           conversationId: message.conversation.id,
           expectedVersion: message.conversation.version,

@@ -110,6 +110,18 @@ describe('AgentMessageHandler', () => {
     expect(handovers).toEqual(['needs_staff']);
   });
 
+  it('keeps discovery in AI control when the model only asks to search', async () => {
+    const { handler, channel, completions, handovers } = createHarness([
+      { type: 'handover', reason: 'need to search catalog first' }
+    ]);
+
+    await handler.handle(message);
+
+    expect(channel.getCapturedMessages()).toHaveLength(1);
+    expect(completions).toEqual(['replied']);
+    expect(handovers).toEqual([]);
+  });
+
   it('does not send when conversation control belongs to a human', async () => {
     const { handler, channel, completions, handovers } = createHarness([
       { type: 'reply', text: 'must not send', evidenceChunkIds: [] }
