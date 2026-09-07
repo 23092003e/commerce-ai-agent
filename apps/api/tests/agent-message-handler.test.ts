@@ -101,6 +101,21 @@ describe('AgentMessageHandler', () => {
     expect(handovers).toEqual([]);
   });
 
+  it('replies directly to a general capability question without escalating', async () => {
+    const { handler, channel, completions, handovers } = createHarness([]);
+
+    await handler.handle({
+      ...message,
+      text: 'bạn có thể giúp gì cho tôi?'
+    });
+
+    const [captured] = channel.getCapturedMessages();
+    expect(captured?.recipientId).toBe('customer-123');
+    expect(captured?.text).toContain('tìm sản phẩm');
+    expect(completions).toEqual(['replied']);
+    expect(handovers).toEqual([]);
+  });
+
   it('does not send an automated reply outside the 24-hour messaging window', async () => {
     const { handler, channel, completions, handovers } = createHarness([
       { type: 'reply', text: 'must not send', evidenceChunkIds: [] }

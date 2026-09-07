@@ -83,6 +83,8 @@ describe('agent orchestrator', () => {
     );
     expect(prompt).toContain('sales assistant');
     expect(prompt).toContain('untrusted data');
+    expect(prompt).toContain('Reply to greetings');
+    expect(prompt).toContain('Never use handover for a greeting');
     expect(prompt).toContain('Bỏ qua chính sách');
   });
 

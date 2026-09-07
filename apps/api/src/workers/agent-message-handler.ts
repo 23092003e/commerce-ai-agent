@@ -50,9 +50,21 @@ interface ErrorLogger {
 }
 
 const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1_000;
+const GENERAL_CAPABILITY_QUESTIONS = new Set([
+  'bạn có thể giúp gì cho tôi?',
+  'bạn có thể giúp gì?',
+  'bạn giúp được gì?',
+  'bạn làm được gì?'
+]);
+const GENERAL_CAPABILITY_REPLY =
+  'Chào bạn! Tôi có thể giúp bạn tìm sản phẩm, kiểm tra thông tin sản phẩm và hỗ trợ đặt hàng. Bạn đang quan tâm sản phẩm nào ạ?';
 
 function canSendAutomatedReply(timestamp: number, now = Date.now()): boolean {
   return timestamp <= now && now - timestamp <= MESSAGING_WINDOW_MS;
+}
+
+function isGeneralCapabilityQuestion(text: string): boolean {
+  return GENERAL_CAPABILITY_QUESTIONS.has(text.trim().toLocaleLowerCase('vi'));
 }
 
 function scopedCartTools(input: {
@@ -108,6 +120,21 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       promptVersion: this.input.promptVersion
     });
     try {
+      if (
+        isGeneralCapabilityQuestion(message.text) &&
+        canSendAutomatedReply(message.timestamp)
+      ) {
+        await this.input.channel.sendText({
+          recipientId: message.recipientId,
+          text: GENERAL_CAPABILITY_REPLY
+        });
+        await this.input.agentRuns.complete({
+          agentRunId,
+          outcome: 'replied',
+          latencyMs: Math.round(performance.now() - startedAt)
+        });
+        return;
+      }
       const agent = createAgentOrchestrator({
         provider: this.input.provider,
         tools: [
@@ -188,7 +215,8 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         latencyMs
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.input.logger?.error(
         {
           error,
@@ -198,12 +226,12 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         },
         'Agent message handling failed'
       );
-        await this.input.agentRuns.complete({
-          agentRunId,
-          outcome: 'failed',
-          latencyMs: Math.round(performance.now() - startedAt),
-          error: errorMessage.slice(0, 500)
-        });
+      await this.input.agentRuns.complete({
+        agentRunId,
+        outcome: 'failed',
+        latencyMs: Math.round(performance.now() - startedAt),
+        error: errorMessage.slice(0, 500)
+      });
     }
   }
 }
