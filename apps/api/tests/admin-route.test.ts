@@ -351,4 +351,54 @@ describe('admin operational data routes', () => {
     expect(accepted.body).toContain('Signature Cake');
     await app.close();
   });
+
+  it('returns product variants and inventory only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const productId = '33333333-3333-4333-8333-333333333333';
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async getProductDetail(id) {
+            if (id !== productId) return null;
+            return {
+              id: productId,
+              name: 'Signature Cake',
+              status: 'active',
+              currency: 'VND',
+              description: 'A celebration cake.',
+              variants: [
+                {
+                  sku: 'CAKE-001-L',
+                  title: 'Large',
+                  status: 'active',
+                  price: '450000',
+                  availableInventory: 8
+                }
+              ]
+            };
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/products/${productId}`;
+    const denied = await app.inject({ method: 'GET', url });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('CAKE-001-L');
+    await app.close();
+  });
 });

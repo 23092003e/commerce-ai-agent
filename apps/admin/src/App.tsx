@@ -52,6 +52,20 @@ interface Product {
   variantCount: number;
   availableInventory: number;
 }
+interface ProductDetail {
+  id: string;
+  name: string;
+  status: string;
+  currency: string;
+  description: string;
+  variants: Array<{
+    sku: string;
+    title: string;
+    status: string;
+    price: string;
+    availableInventory: number;
+  }>;
+}
 interface Customer {
   id: string;
   name: string | null;
@@ -118,6 +132,15 @@ function isOrderDetail(value: unknown): value is { order: OrderDetail } {
     value.order !== null
   );
 }
+function isProductDetail(value: unknown): value is { product: ProductDetail } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'product' in value &&
+    typeof value.product === 'object' &&
+    value.product !== null
+  );
+}
 
 export default function App() {
   const [token, setToken] = useState(
@@ -129,6 +152,9 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productDetail, setProductDetail] = useState<ProductDetail | null>(
+    null
+  );
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -258,6 +284,22 @@ export default function App() {
       return;
     }
     setOrderDetail(data.order);
+  }
+  async function loadProductDetail(productId: string) {
+    const response = await fetch(
+      `${apiUrl}/internal/admin/products/${productId}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) {
+      setStatus('Could not load product detail.');
+      return;
+    }
+    const data: unknown = await response.json();
+    if (!isProductDetail(data)) {
+      setStatus('Admin API returned invalid product detail.');
+      return;
+    }
+    setProductDetail(data.product);
   }
   useEffect(() => {
     if (token) void load();
@@ -452,26 +494,50 @@ export default function App() {
           </>
         )}
         {view === 'products' && (
-          <DataTable
-            title="Products, variants and available inventory"
-            headers={[
-              'Product',
-              'SKU',
-              'Status',
-              'Price',
-              'Variants',
-              'Available'
-            ]}
-            rows={products.map((item) => [
-              item.name,
-              item.sku ?? '—',
-              <mark>{item.status}</mark>,
-              formatMoney(item.price, item.currency),
-              item.variantCount,
-              item.availableInventory
-            ])}
-            empty="No products yet."
-          />
+          <>
+            <DataTable
+              title="Products, variants and available inventory"
+              headers={[
+                'Product',
+                'SKU',
+                'Status',
+                'Price',
+                'Variants',
+                'Available'
+              ]}
+              rows={products.map((item) => [
+                <button
+                  className="table-button"
+                  onClick={() => void loadProductDetail(item.id)}
+                >
+                  {item.name}
+                </button>,
+                item.sku ?? '—',
+                <mark>{item.status}</mark>,
+                formatMoney(item.price, item.currency),
+                item.variantCount,
+                item.availableInventory
+              ])}
+              empty="No products yet."
+            />
+            {productDetail && (
+              <section className="order-detail">
+                <h2>
+                  {productDetail.name} <mark>{productDetail.status}</mark>
+                </h2>
+                <p>{productDetail.description}</p>
+                <ul>
+                  {productDetail.variants.map((variant) => (
+                    <li key={variant.sku}>
+                      {variant.sku} · {variant.title} · {variant.status} ·{' '}
+                      {formatMoney(variant.price, productDetail.currency)} ·{' '}
+                      {variant.availableInventory} available
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
         {view === 'customers' && (
           <DataTable

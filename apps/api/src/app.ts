@@ -99,6 +99,20 @@ export interface AdminOperationalData {
       availableInventory: number;
     }>
   >;
+  getProductDetail?(productId: string): Promise<{
+    id: string;
+    name: string;
+    status: string;
+    currency: string;
+    description: string;
+    variants: Array<{
+      sku: string;
+      title: string;
+      status: string;
+      price: string;
+      availableInventory: number;
+    }>;
+  } | null>;
   listCustomers?(): Promise<
     Array<{
       id: string;
@@ -233,6 +247,21 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       }
       return { products: (await admin.data?.listProducts?.()) ?? [] };
+    });
+    app.get('/internal/admin/products/:productId', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      }
+      const params = z
+        .object({ productId: z.uuid() })
+        .safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_admin_request' });
+      const product = await admin.data?.getProductDetail?.(
+        params.data.productId
+      );
+      if (!product) return reply.code(404).send({ error: 'product_not_found' });
+      return { product };
     });
     app.get('/internal/admin/customers', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {

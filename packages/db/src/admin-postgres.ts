@@ -55,6 +55,21 @@ export interface AdminProductSummary {
   availableInventory: number;
 }
 
+export interface AdminProductDetail {
+  id: string;
+  name: string;
+  status: string;
+  currency: string;
+  description: string;
+  variants: Array<{
+    sku: string;
+    title: string;
+    status: string;
+    price: string;
+    availableInventory: number;
+  }>;
+}
+
 export interface AdminCustomerSummary {
   id: string;
   name: string | null;
@@ -174,6 +189,30 @@ export class PostgresAdminRepository {
        LIMIT 100`
     );
     return result.rows;
+  }
+
+  async getProductDetail(
+    productId: string
+  ): Promise<AdminProductDetail | null> {
+    const product = await this.pool.query<Omit<AdminProductDetail, 'variants'>>(
+      'SELECT id, name, status, currency, description FROM products WHERE id = $1',
+      [productId]
+    );
+    const row = product.rows[0];
+    if (!row) return null;
+    const variants = await this.pool.query<
+      AdminProductDetail['variants'][number]
+    >(
+      `SELECT v.sku, v.title, v.status, v.price::text AS price,
+              COALESCE(i.quantity_available - i.quantity_reserved, 0)::integer
+                AS "availableInventory"
+       FROM product_variants v
+       LEFT JOIN inventory i ON i.variant_id = v.id
+       WHERE v.product_id = $1
+       ORDER BY v.sku`,
+      [productId]
+    );
+    return { ...row, variants: variants.rows };
   }
 
   async listCustomers(): Promise<AdminCustomerSummary[]> {
