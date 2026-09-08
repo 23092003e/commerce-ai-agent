@@ -156,9 +156,15 @@ const app = buildApp({
         secret: config.ADMIN_AUTH_SECRET,
         repository,
         data: adminRepository,
-        knowledge
+        knowledge,
+        handovers: handoverRepository
       }
-    : { repository, data: adminRepository, knowledge },
+    : {
+        repository,
+        data: adminRepository,
+        knowledge,
+        handovers: handoverRepository
+      },
   readiness: {
     async check() {
       await Promise.all([repository.ping(), queue.ping()]);

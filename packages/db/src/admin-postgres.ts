@@ -109,6 +109,7 @@ export interface AdminHandoverSummary {
   status: string;
   reason: string;
   requestedAt: string;
+  version: number;
 }
 export interface AdminCartSummary {
   id: string;
@@ -326,7 +327,7 @@ export class PostgresAdminRepository {
     const result = await this.pool.query<AdminHandoverSummary>(
       `SELECT h.id, h.conversation_id AS "conversationId",
               COALESCE(cu.display_name, cu.meta_psid) AS customer,
-              h.status, h.reason, h.requested_at::text AS "requestedAt"
+              h.status, h.reason, h.requested_at::text AS "requestedAt", c.version
        FROM handovers h
        JOIN conversations c ON c.id = h.conversation_id
        JOIN customers cu ON cu.id = c.customer_id

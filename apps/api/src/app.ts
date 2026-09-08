@@ -162,6 +162,7 @@ export interface AdminOperationalData {
       status: string;
       reason: string;
       requestedAt: string;
+      version: number;
     }>
   >;
   listCarts?(): Promise<
@@ -195,6 +196,12 @@ export interface BuildAppOptions {
         | { type: 'created'; documentId: string }
         | { type: 'duplicate'; documentId: string }
       >;
+    };
+    handovers?: {
+      resolve(input: {
+        conversationId: string;
+        expectedVersion: number;
+      }): Promise<{ version: number }>;
     };
   };
 }
@@ -363,6 +370,35 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       return { handovers: (await admin.data?.listHandovers?.()) ?? [] };
     });
+    app.post(
+      '/internal/admin/handovers/:conversationId/resolve',
+      async (request, reply) => {
+        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+          return reply.code(401).send({ error: 'admin_unauthorized' });
+        const params = z
+          .object({ conversationId: z.uuid() })
+          .safeParse(request.params);
+        let raw: unknown;
+        try {
+          raw = Buffer.isBuffer(request.body)
+            ? (JSON.parse(request.body.toString('utf8')) as unknown)
+            : request.body;
+        } catch {
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        }
+        const body = z
+          .object({ expectedVersion: z.number().int().positive() })
+          .safeParse(raw);
+        if (!params.success || !body.success)
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        if (!admin.handovers)
+          return reply.code(501).send({ error: 'handover_unavailable' });
+        return admin.handovers.resolve({
+          conversationId: params.data.conversationId,
+          expectedVersion: body.data.expectedVersion
+        });
+      }
+    );
     app.get('/internal/admin/carts', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
         return reply.code(401).send({ error: 'admin_unauthorized' });

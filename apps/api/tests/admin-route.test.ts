@@ -466,7 +466,8 @@ describe('admin operational data routes', () => {
                 customer: 'Lan',
                 status: 'pending',
                 reason: 'needs_staff',
-                requestedAt: '2026-09-08T00:00:00.000Z'
+                requestedAt: '2026-09-08T00:00:00.000Z',
+                version: 2
               }
             ];
           }
@@ -485,6 +486,48 @@ describe('admin operational data routes', () => {
     });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.body).toContain('needs_staff');
+    await app.close();
+  });
+
+  it('resolves a handover only for an authorized admin with a matching version', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const calls: Array<{ conversationId: string; expectedVersion: number }> =
+      [];
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        handovers: {
+          async resolve(input) {
+            calls.push(input);
+            return { version: 3 };
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/handovers/${conversationId}/resolve`;
+    const denied = await app.inject({
+      method: 'POST',
+      url,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ expectedVersion: 2 })
+    });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'POST',
+      url,
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'content-type': 'application/json'
+      },
+      payload: JSON.stringify({ expectedVersion: 2 })
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(calls).toEqual([{ conversationId, expectedVersion: 2 }]);
     await app.close();
   });
 

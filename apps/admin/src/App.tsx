@@ -108,6 +108,7 @@ interface Handover {
   status: string;
   reason: string;
   requestedAt: string;
+  version: number;
 }
 interface Cart {
   id: string;
@@ -397,6 +398,28 @@ export default function App() {
       return;
     }
     setRunDetail(data.run);
+  }
+  async function resolveHandover(item: Handover) {
+    const response = await fetch(
+      `${apiUrl}/internal/admin/handovers/${item.conversationId}/resolve`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ expectedVersion: item.version })
+      }
+    );
+    if (!response.ok) {
+      setStatus(
+        response.status === 409
+          ? 'Handover changed elsewhere. Refresh first.'
+          : 'Could not resolve handover.'
+      );
+      return;
+    }
+    await load();
   }
   useEffect(() => {
     if (token) void load();
@@ -762,12 +785,18 @@ export default function App() {
         {view === 'handovers' && (
           <DataTable
             title="Open handovers"
-            headers={['Customer', 'Status', 'Reason', 'Requested']}
+            headers={['Customer', 'Status', 'Reason', 'Requested', 'Action']}
             rows={handovers.map((item) => [
               item.customer ?? 'Unknown',
               <mark>{item.status}</mark>,
               item.reason,
-              formatDate(item.requestedAt)
+              formatDate(item.requestedAt),
+              <button
+                className="table-button"
+                onClick={() => void resolveHandover(item)}
+              >
+                Resolve
+              </button>
             ])}
             empty="No open handovers."
           />
