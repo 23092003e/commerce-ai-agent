@@ -73,6 +73,9 @@ interface Customer {
   email: string | null;
   conversationCount: number;
 }
+interface CustomerDetail extends Customer {
+  orderCount: number;
+}
 interface KnowledgeDocument {
   id: string;
   title: string;
@@ -141,6 +144,17 @@ function isProductDetail(value: unknown): value is { product: ProductDetail } {
     value.product !== null
   );
 }
+function isCustomerDetail(
+  value: unknown
+): value is { customer: CustomerDetail } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'customer' in value &&
+    typeof value.customer === 'object' &&
+    value.customer !== null
+  );
+}
 
 export default function App() {
   const [token, setToken] = useState(
@@ -156,6 +170,9 @@ export default function App() {
     null
   );
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(
+    null
+  );
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -300,6 +317,22 @@ export default function App() {
       return;
     }
     setProductDetail(data.product);
+  }
+  async function loadCustomerDetail(customerId: string) {
+    const response = await fetch(
+      `${apiUrl}/internal/admin/customers/${customerId}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) {
+      setStatus('Could not load customer detail.');
+      return;
+    }
+    const data: unknown = await response.json();
+    if (!isCustomerDetail(data)) {
+      setStatus('Admin API returned invalid customer detail.');
+      return;
+    }
+    setCustomerDetail(data.customer);
   }
   useEffect(() => {
     if (token) void load();
@@ -540,17 +573,37 @@ export default function App() {
           </>
         )}
         {view === 'customers' && (
-          <DataTable
-            title="Customers"
-            headers={['Name', 'Phone', 'Email', 'Conversations']}
-            rows={customers.map((item) => [
-              item.name ?? 'Unknown',
-              item.phone ?? '—',
-              item.email ?? '—',
-              item.conversationCount
-            ])}
-            empty="No customers yet."
-          />
+          <>
+            <DataTable
+              title="Customers"
+              headers={['Name', 'Phone', 'Email', 'Conversations']}
+              rows={customers.map((item) => [
+                <button
+                  className="table-button"
+                  onClick={() => void loadCustomerDetail(item.id)}
+                >
+                  {item.name ?? 'Unknown'}
+                </button>,
+                item.phone ?? '—',
+                item.email ?? '—',
+                item.conversationCount
+              ])}
+              empty="No customers yet."
+            />
+            {customerDetail && (
+              <section className="order-detail">
+                <h2>{customerDetail.name ?? 'Unknown customer'}</h2>
+                <p>
+                  Phone: {customerDetail.phone ?? '—'} · Email:{' '}
+                  {customerDetail.email ?? '—'}
+                </p>
+                <p>
+                  {customerDetail.conversationCount} conversations ·{' '}
+                  {customerDetail.orderCount} orders
+                </p>
+              </section>
+            )}
+          </>
         )}
         {view === 'knowledge' && (
           <>

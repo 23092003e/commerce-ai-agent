@@ -401,4 +401,46 @@ describe('admin operational data routes', () => {
     expect(accepted.body).toContain('CAKE-001-L');
     await app.close();
   });
+
+  it('returns a customer context only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const customerId = '44444444-4444-4444-8444-444444444444';
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async getCustomerDetail(id) {
+            return id === customerId
+              ? {
+                  id,
+                  name: 'Lan',
+                  phone: '***1234',
+                  email: null,
+                  conversationCount: 1,
+                  orderCount: 2
+                }
+              : null;
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/customers/${customerId}`;
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('***1234');
+    await app.close();
+  });
 });

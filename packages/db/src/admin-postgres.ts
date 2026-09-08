@@ -78,6 +78,10 @@ export interface AdminCustomerSummary {
   conversationCount: number;
 }
 
+export interface AdminCustomerDetail extends AdminCustomerSummary {
+  orderCount: number;
+}
+
 export interface AdminKnowledgeDocumentSummary {
   id: string;
   title: string;
@@ -235,6 +239,21 @@ export class PostgresAdminRepository {
        LIMIT 100`
     );
     return result.rows;
+  }
+
+  async getCustomerDetail(
+    customerId: string
+  ): Promise<AdminCustomerDetail | null> {
+    const result = await this.pool.query<AdminCustomerDetail>(
+      `SELECT cu.id, cu.display_name AS name,
+              CASE WHEN cu.phone IS NULL THEN NULL WHEN length(cu.phone) <= 4 THEN '***' ELSE '***' || right(cu.phone, 4) END AS phone,
+              CASE WHEN cu.email IS NULL THEN NULL ELSE left(cu.email, 1) || '***' END AS email,
+              (SELECT COUNT(*)::integer FROM conversations WHERE customer_id = cu.id) AS "conversationCount",
+              (SELECT COUNT(*)::integer FROM orders WHERE customer_id = cu.id) AS "orderCount"
+       FROM customers cu WHERE cu.id = $1`,
+      [customerId]
+    );
+    return result.rows[0] ?? null;
   }
 
   async listKnowledgeDocuments(): Promise<AdminKnowledgeDocumentSummary[]> {

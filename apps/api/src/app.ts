@@ -122,6 +122,14 @@ export interface AdminOperationalData {
       conversationCount: number;
     }>
   >;
+  getCustomerDetail?(customerId: string): Promise<{
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    conversationCount: number;
+    orderCount: number;
+  } | null>;
   listKnowledgeDocuments?(): Promise<
     Array<{
       id: string;
@@ -268,6 +276,21 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       }
       return { customers: (await admin.data?.listCustomers?.()) ?? [] };
+    });
+    app.get('/internal/admin/customers/:customerId', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      const params = z
+        .object({ customerId: z.uuid() })
+        .safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_admin_request' });
+      const customer = await admin.data?.getCustomerDetail?.(
+        params.data.customerId
+      );
+      if (!customer)
+        return reply.code(404).send({ error: 'customer_not_found' });
+      return { customer };
     });
     app.get('/internal/admin/knowledge', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
