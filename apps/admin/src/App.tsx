@@ -95,6 +95,12 @@ interface AgentRun {
   toolCallCount: number;
   startedAt: string;
 }
+interface AgentRunDetail {
+  id: string;
+  status: string;
+  error: string | null;
+  tools: Array<{ toolName: string; status: string; latencyMs: number }>;
+}
 interface Handover {
   id: string;
   conversationId: string;
@@ -179,6 +185,15 @@ function isCustomerDetail(
     value.customer !== null
   );
 }
+function isAgentRunDetail(value: unknown): value is { run: AgentRunDetail } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'run' in value &&
+    typeof value.run === 'object' &&
+    value.run !== null
+  );
+}
 
 export default function App() {
   const [token, setToken] = useState(
@@ -199,6 +214,7 @@ export default function App() {
   );
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [runDetail, setRunDetail] = useState<AgentRunDetail | null>(null);
   const [handovers, setHandovers] = useState<Handover[]>([]);
   const [carts, setCarts] = useState<Cart[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -365,6 +381,22 @@ export default function App() {
       return;
     }
     setCustomerDetail(data.customer);
+  }
+  async function loadRunDetail(runId: string) {
+    const response = await fetch(
+      `${apiUrl}/internal/admin/agent-runs/${runId}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (!response.ok) {
+      setStatus('Could not load agent trace.');
+      return;
+    }
+    const data: unknown = await response.json();
+    if (!isAgentRunDetail(data)) {
+      setStatus('Admin API returned invalid agent trace.');
+      return;
+    }
+    setRunDetail(data.run);
   }
   useEffect(() => {
     if (token) void load();
@@ -682,28 +714,50 @@ export default function App() {
           </>
         )}
         {view === 'traces' && (
-          <DataTable
-            title="Latest agent runs"
-            headers={[
-              'Customer',
-              'Model',
-              'Status',
-              'Outcome',
-              'Latency',
-              'Tools',
-              'Started'
-            ]}
-            rows={runs.map((item) => [
-              item.customer ?? 'Unknown',
-              item.model,
-              <mark>{item.status}</mark>,
-              item.outcome ?? '—',
-              item.latencyMs === null ? '—' : `${String(item.latencyMs)} ms`,
-              item.toolCallCount,
-              formatDate(item.startedAt)
-            ])}
-            empty="No agent runs yet."
-          />
+          <>
+            <DataTable
+              title="Latest agent runs"
+              headers={[
+                'Customer',
+                'Model',
+                'Status',
+                'Outcome',
+                'Latency',
+                'Tools',
+                'Started'
+              ]}
+              rows={runs.map((item) => [
+                <button
+                  className="table-button"
+                  onClick={() => void loadRunDetail(item.id)}
+                >
+                  {item.customer ?? 'Unknown'}
+                </button>,
+                item.model,
+                <mark>{item.status}</mark>,
+                item.outcome ?? '—',
+                item.latencyMs === null ? '—' : `${String(item.latencyMs)} ms`,
+                item.toolCallCount,
+                formatDate(item.startedAt)
+              ])}
+              empty="No agent runs yet."
+            />
+            {runDetail && (
+              <section className="order-detail">
+                <h2>
+                  Trace <mark>{runDetail.status}</mark>
+                </h2>
+                {runDetail.error && <p>Error: {runDetail.error}</p>}
+                <ul>
+                  {runDetail.tools.map((tool, index) => (
+                    <li key={`${tool.toolName}-${String(index)}`}>
+                      {tool.toolName} · {tool.status} · {tool.latencyMs} ms
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
         {view === 'handovers' && (
           <DataTable
