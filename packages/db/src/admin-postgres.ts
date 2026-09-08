@@ -102,6 +102,14 @@ export interface AdminAgentRunSummary {
   toolCallCount: number;
   startedAt: string;
 }
+export interface AdminHandoverSummary {
+  id: string;
+  conversationId: string;
+  customer: string | null;
+  status: string;
+  reason: string;
+  requestedAt: string;
+}
 
 export class PostgresAdminRepository {
   private readonly pool: Pool;
@@ -282,6 +290,21 @@ export class PostgresAdminRepository {
        LEFT JOIN tool_calls t ON t.agent_run_id = r.id
        GROUP BY r.id, cu.id
        ORDER BY r.started_at DESC
+       LIMIT 100`
+    );
+    return result.rows;
+  }
+
+  async listHandovers(): Promise<AdminHandoverSummary[]> {
+    const result = await this.pool.query<AdminHandoverSummary>(
+      `SELECT h.id, h.conversation_id AS "conversationId",
+              COALESCE(cu.display_name, cu.meta_psid) AS customer,
+              h.status, h.reason, h.requested_at::text AS "requestedAt"
+       FROM handovers h
+       JOIN conversations c ON c.id = h.conversation_id
+       JOIN customers cu ON cu.id = c.customer_id
+       WHERE h.status IN ('pending', 'active')
+       ORDER BY h.requested_at ASC
        LIMIT 100`
     );
     return result.rows;

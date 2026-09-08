@@ -153,6 +153,16 @@ export interface AdminOperationalData {
       startedAt: string;
     }>
   >;
+  listHandovers?(): Promise<
+    Array<{
+      id: string;
+      conversationId: string;
+      customer: string | null;
+      status: string;
+      reason: string;
+      requestedAt: string;
+    }>
+  >;
 }
 
 export interface BuildAppOptions {
@@ -325,6 +335,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       }
       return { runs: (await admin.data?.listAgentRuns?.()) ?? [] };
+    });
+    app.get('/internal/admin/handovers', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      return { handovers: (await admin.data?.listHandovers?.()) ?? [] };
     });
     app.post(
       '/internal/admin/conversations/:conversationId/control',

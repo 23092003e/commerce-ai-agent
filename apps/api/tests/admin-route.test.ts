@@ -443,4 +443,48 @@ describe('admin operational data routes', () => {
     expect(accepted.body).toContain('***1234');
     await app.close();
   });
+
+  it('returns pending handovers only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async listHandovers() {
+            return [
+              {
+                id: 'handover-1',
+                conversationId,
+                customer: 'Lan',
+                status: 'pending',
+                reason: 'needs_staff',
+                requestedAt: '2026-09-08T00:00:00.000Z'
+              }
+            ];
+          }
+        }
+      }
+    });
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/handovers'
+    });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/handovers',
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('needs_staff');
+    await app.close();
+  });
 });

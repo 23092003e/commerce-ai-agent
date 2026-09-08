@@ -95,8 +95,22 @@ interface AgentRun {
   toolCallCount: number;
   startedAt: string;
 }
+interface Handover {
+  id: string;
+  conversationId: string;
+  customer: string | null;
+  status: string;
+  reason: string;
+  requestedAt: string;
+}
 type View =
-  'inbox' | 'customers' | 'products' | 'orders' | 'knowledge' | 'traces';
+  | 'inbox'
+  | 'customers'
+  | 'products'
+  | 'orders'
+  | 'knowledge'
+  | 'traces'
+  | 'handovers';
 
 const configuredApiUrl: unknown = import.meta.env.VITE_API_URL;
 const apiUrl =
@@ -175,6 +189,7 @@ export default function App() {
   );
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [handovers, setHandovers] = useState<Handover[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [knowledgeTitle, setKnowledgeTitle] = useState('');
   const [knowledgeContent, setKnowledgeContent] = useState('');
@@ -201,7 +216,8 @@ export default function App() {
         nextProducts,
         nextCustomers,
         nextDocuments,
-        nextRuns
+        nextRuns,
+        nextHandovers
       ] = await Promise.all([
         fetchList<Conversation>(
           '/internal/admin/conversations',
@@ -211,7 +227,8 @@ export default function App() {
         fetchList<Product>('/internal/admin/products', 'products'),
         fetchList<Customer>('/internal/admin/customers', 'customers'),
         fetchList<KnowledgeDocument>('/internal/admin/knowledge', 'documents'),
-        fetchList<AgentRun>('/internal/admin/agent-runs', 'runs')
+        fetchList<AgentRun>('/internal/admin/agent-runs', 'runs'),
+        fetchList<Handover>('/internal/admin/handovers', 'handovers')
       ]);
       setConversations(nextConversations);
       setOrders(nextOrders);
@@ -219,6 +236,7 @@ export default function App() {
       setCustomers(nextCustomers);
       setDocuments(nextDocuments);
       setRuns(nextRuns);
+      setHandovers(nextHandovers);
       const firstConversation = nextConversations.at(0) ?? null;
       setSelected(
         (current) =>
@@ -359,6 +377,7 @@ export default function App() {
     { id: 'products', label: 'Products' },
     { id: 'orders', label: 'Orders' },
     { id: 'knowledge', label: 'Knowledge' },
+    { id: 'handovers', label: 'Handovers' },
     { id: 'traces', label: 'Agent traces' }
   ];
 
@@ -669,6 +688,19 @@ export default function App() {
               formatDate(item.startedAt)
             ])}
             empty="No agent runs yet."
+          />
+        )}
+        {view === 'handovers' && (
+          <DataTable
+            title="Open handovers"
+            headers={['Customer', 'Status', 'Reason', 'Requested']}
+            rows={handovers.map((item) => [
+              item.customer ?? 'Unknown',
+              <mark>{item.status}</mark>,
+              item.reason,
+              formatDate(item.requestedAt)
+            ])}
+            empty="No open handovers."
           />
         )}
       </section>
