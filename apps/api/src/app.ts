@@ -163,6 +163,17 @@ export interface AdminOperationalData {
       requestedAt: string;
     }>
   >;
+  listCarts?(): Promise<
+    Array<{
+      id: string;
+      customer: string | null;
+      status: string;
+      itemCount: number;
+      subtotal: string;
+      currency: string;
+      updatedAt: string;
+    }>
+  >;
 }
 
 export interface BuildAppOptions {
@@ -340,6 +351,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
         return reply.code(401).send({ error: 'admin_unauthorized' });
       return { handovers: (await admin.data?.listHandovers?.()) ?? [] };
+    });
+    app.get('/internal/admin/carts', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      return { carts: (await admin.data?.listCarts?.()) ?? [] };
     });
     app.post(
       '/internal/admin/conversations/:conversationId/control',

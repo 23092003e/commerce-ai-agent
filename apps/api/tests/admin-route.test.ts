@@ -487,4 +487,49 @@ describe('admin operational data routes', () => {
     expect(accepted.body).toContain('needs_staff');
     await app.close();
   });
+
+  it('returns carts only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async listCarts() {
+            return [
+              {
+                id: 'cart-1',
+                customer: 'Lan',
+                status: 'active',
+                itemCount: 2,
+                subtotal: '450000',
+                currency: 'VND',
+                updatedAt: '2026-09-08T00:00:00.000Z'
+              }
+            ];
+          }
+        }
+      }
+    });
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/carts'
+    });
+    expect(denied.statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url: '/internal/admin/carts',
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('450000');
+    await app.close();
+  });
 });

@@ -110,6 +110,15 @@ export interface AdminHandoverSummary {
   reason: string;
   requestedAt: string;
 }
+export interface AdminCartSummary {
+  id: string;
+  customer: string | null;
+  status: string;
+  itemCount: number;
+  subtotal: string;
+  currency: string;
+  updatedAt: string;
+}
 
 export class PostgresAdminRepository {
   private readonly pool: Pool;
@@ -305,6 +314,22 @@ export class PostgresAdminRepository {
        JOIN customers cu ON cu.id = c.customer_id
        WHERE h.status IN ('pending', 'active')
        ORDER BY h.requested_at ASC
+       LIMIT 100`
+    );
+    return result.rows;
+  }
+
+  async listCarts(): Promise<AdminCartSummary[]> {
+    const result = await this.pool.query<AdminCartSummary>(
+      `SELECT ca.id, COALESCE(cu.display_name, cu.meta_psid) AS customer,
+              ca.status, COUNT(ci.id)::integer AS "itemCount",
+              COALESCE(SUM(ci.quantity * ci.unit_price_snapshot), 0)::text AS subtotal,
+              ca.currency, ca.updated_at::text AS "updatedAt"
+       FROM carts ca
+       JOIN customers cu ON cu.id = ca.customer_id
+       LEFT JOIN cart_items ci ON ci.cart_id = ca.id
+       GROUP BY ca.id, cu.id
+       ORDER BY ca.updated_at DESC
        LIMIT 100`
     );
     return result.rows;
