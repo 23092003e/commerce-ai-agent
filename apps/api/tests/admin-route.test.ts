@@ -532,4 +532,50 @@ describe('admin operational data routes', () => {
     expect(accepted.body).toContain('450000');
     await app.close();
   });
+
+  it('returns agent tool summaries only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const runId = '55555555-5555-4555-8555-555555555555';
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async listConversations() {
+            return [];
+          },
+          async getAgentRunDetail(id) {
+            return id === runId
+              ? {
+                  id,
+                  status: 'failed',
+                  error: 'timeout',
+                  tools: [
+                    {
+                      toolName: 'catalog.search',
+                      status: 'failed',
+                      latencyMs: 100
+                    }
+                  ]
+                }
+              : null;
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/agent-runs/${runId}`;
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('catalog.search');
+    await app.close();
+  });
 });

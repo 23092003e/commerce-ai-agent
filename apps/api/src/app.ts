@@ -153,6 +153,7 @@ export interface AdminOperationalData {
       startedAt: string;
     }>
   >;
+  getAgentRunDetail?(runId: string): Promise<unknown>;
   listHandovers?(): Promise<
     Array<{
       id: string;
@@ -346,6 +347,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(401).send({ error: 'admin_unauthorized' });
       }
       return { runs: (await admin.data?.listAgentRuns?.()) ?? [] };
+    });
+    app.get('/internal/admin/agent-runs/:runId', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      const params = z.object({ runId: z.uuid() }).safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_admin_request' });
+      const run = await admin.data?.getAgentRunDetail?.(params.data.runId);
+      if (!run) return reply.code(404).send({ error: 'agent_run_not_found' });
+      return { run };
     });
     app.get('/internal/admin/handovers', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))

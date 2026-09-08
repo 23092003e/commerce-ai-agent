@@ -304,6 +304,24 @@ export class PostgresAdminRepository {
     return result.rows;
   }
 
+  async getAgentRunDetail(runId: string): Promise<unknown> {
+    const run = await this.pool.query<Record<string, unknown>>(
+      `SELECT id, model_provider AS "modelProvider", model_name AS "modelName", status,
+              final_outcome AS outcome, latency_ms AS "latencyMs", error,
+              started_at::text AS "startedAt", completed_at::text AS "completedAt"
+       FROM agent_runs WHERE id = $1`,
+      [runId]
+    );
+    const row = run.rows[0];
+    if (!row) return null;
+    const tools = await this.pool.query<Record<string, unknown>>(
+      `SELECT tool_name AS "toolName", status, latency_ms AS "latencyMs", created_at::text AS "createdAt"
+       FROM tool_calls WHERE agent_run_id = $1 ORDER BY created_at ASC`,
+      [runId]
+    );
+    return { ...row, tools: tools.rows };
+  }
+
   async listHandovers(): Promise<AdminHandoverSummary[]> {
     const result = await this.pool.query<AdminHandoverSummary>(
       `SELECT h.id, h.conversation_id AS "conversationId",
