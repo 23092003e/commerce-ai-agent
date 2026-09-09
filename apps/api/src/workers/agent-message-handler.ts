@@ -138,6 +138,20 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
     return true;
   }
 
+  private async completeAgentRun(
+    input: Parameters<AgentRunStore['complete']>[0]
+  ): Promise<void> {
+    await this.input.agentRuns.complete(input);
+    this.input.metrics?.observe('agent_latency_ms', input.latencyMs, {
+      outcome: input.outcome
+    });
+    if (input.outcome === 'handed_over') {
+      this.input.metrics?.increment('handovers_total', {
+        outcome: input.outcome
+      });
+    }
+  }
+
   async handle(
     message: Parameters<PersistedInboundMessageHandler['handle']>[0]
   ): Promise<void> {
@@ -165,7 +179,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           text: `Đơn hàng ${order.orderNumber} đã được xác nhận.`,
           timestamp: message.timestamp
         });
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: sent ? 'replied' : 'handed_over',
           latencyMs: Math.round(performance.now() - startedAt)
@@ -187,14 +201,14 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
             expectedVersion: message.conversation.version,
             reason: 'messaging_window_expired'
           });
-          await this.input.agentRuns.complete({
+          await this.completeAgentRun({
             agentRunId,
             outcome: 'handed_over',
             latencyMs: Math.round(performance.now() - startedAt)
           });
           return;
         }
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: 'replied',
           latencyMs: Math.round(performance.now() - startedAt)
@@ -238,7 +252,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       );
       const latencyMs = Math.round(performance.now() - startedAt);
       if (result.type === 'suppressed') {
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: 'no_action',
           latencyMs
@@ -252,7 +266,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
             text: PRODUCT_DISCOVERY_REPLY,
             timestamp: message.timestamp
           });
-          await this.input.agentRuns.complete({
+          await this.completeAgentRun({
             agentRunId,
             outcome: sent ? 'replied' : 'handed_over',
             latencyMs: Math.round(performance.now() - startedAt)
@@ -264,7 +278,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           expectedVersion: message.conversation.version,
           reason: result.reason
         });
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: 'handed_over',
           latencyMs
@@ -277,7 +291,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           expectedVersion: message.conversation.version,
           reason: 'messaging_window_expired'
         });
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: 'handed_over',
           latencyMs
@@ -295,14 +309,14 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           expectedVersion: message.conversation.version,
           reason: 'messaging_window_expired'
         });
-        await this.input.agentRuns.complete({
+        await this.completeAgentRun({
           agentRunId,
           outcome: 'handed_over',
           latencyMs: Math.round(performance.now() - startedAt)
         });
         return;
       }
-      await this.input.agentRuns.complete({
+      await this.completeAgentRun({
         agentRunId,
         outcome: 'replied',
         latencyMs: Math.round(performance.now() - startedAt)
@@ -319,7 +333,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         },
         'Agent message handling failed'
       );
-      await this.input.agentRuns.complete({
+      await this.completeAgentRun({
         agentRunId,
         outcome: 'failed',
         latencyMs: Math.round(performance.now() - startedAt),

@@ -7,6 +7,7 @@ import {
   type KnowledgeService
 } from '@fanpage/domain';
 import { FakeMessagingChannel, MetaChannelError } from '@fanpage/meta';
+import type { OperationalMetrics } from '@fanpage/observability';
 import { describe, expect, it } from 'vitest';
 import { AgentMessageHandler } from '../src/workers/agent-message-handler.js';
 import type { ReplyPacer } from '../src/workers/reply-pacer.js';
@@ -25,6 +26,7 @@ function createHarness(
   options: {
     replyPacer?: ReplyPacer;
     checkoutOrderConfirmation?: CheckoutOrderConfirmationService;
+    metrics?: OperationalMetrics;
   } = {}
 ) {
   const channel = new FakeMessagingChannel();
@@ -59,7 +61,8 @@ function createHarness(
       : { replyPacer: options.replyPacer }),
     ...(options.checkoutOrderConfirmation === undefined
       ? {}
-      : { checkoutOrderConfirmation: options.checkoutOrderConfirmation })
+      : { checkoutOrderConfirmation: options.checkoutOrderConfirmation }),
+    ...(options.metrics === undefined ? {} : { metrics: options.metrics })
   });
   return { channel, completions, handovers, handler };
 }
@@ -105,6 +108,28 @@ describe('AgentMessageHandler', () => {
 
     expect(pacedTexts).toEqual(['Chào bạn!']);
     expect(channel.getCapturedMessages()).toHaveLength(1);
+  });
+
+  it('emits a redacted agent latency metric after a customer reply', async () => {
+    const metrics: Array<{ name: string; labels: Record<string, string> }> = [];
+    const { handler } = createHarness(
+      [{ type: 'reply', text: 'Chao ban!', evidenceChunkIds: [] }],
+      {
+        metrics: {
+          increment() {},
+          observe(name, _value, labels = {}) {
+            metrics.push({ name, labels });
+          }
+        }
+      }
+    );
+
+    await handler.handle(message);
+
+    expect(metrics).toContainEqual({
+      name: 'agent_latency_ms',
+      labels: { outcome: 'replied' }
+    });
   });
 
   it('transitions to human control when the agent requests handover', async () => {
@@ -323,11 +348,9 @@ describe('AgentMessageHandler', () => {
     await handler.handle(message);
 
     expect(handovers).toEqual(['meta_delivery_invalid_request']);
-    expect(metrics).toEqual([
-      {
-        name: 'meta_send_errors_total',
-        labels: { code: 'invalid_request', retryable: 'false' }
-      }
-    ]);
+    expect(metrics).toContainEqual({
+      name: 'meta_send_errors_total',
+      labels: { code: 'invalid_request', retryable: 'false' }
+    });
   });
 });
