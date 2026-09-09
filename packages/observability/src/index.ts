@@ -1,4 +1,10 @@
 import pino, { type Logger } from 'pino';
+export {
+  createOperationalMetrics,
+  type MetricLogger,
+  type OperationalMetricName,
+  type OperationalMetrics
+} from './metrics.js';
 
 export function createLogger(level = 'info'): Logger {
   return pino({

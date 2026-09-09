@@ -278,6 +278,7 @@ describe('AgentMessageHandler', () => {
 
   it('hands a conversation to staff after a non-retryable Meta delivery failure', async () => {
     const handovers: string[] = [];
+    const metrics: Array<{ name: string; labels: Record<string, string> }> = [];
     const handler = new AgentMessageHandler({
       provider: createScriptedDecisionProvider([
         { type: 'reply', text: 'cannot deliver', evidenceChunkIds: [] }
@@ -310,11 +311,23 @@ describe('AgentMessageHandler', () => {
       },
       modelProvider: 'fake',
       modelName: 'fake',
-      promptVersion: 'test.v1'
+      promptVersion: 'test.v1',
+      metrics: {
+        increment(name, labels = {}) {
+          metrics.push({ name, labels });
+        },
+        observe() {}
+      }
     });
 
     await handler.handle(message);
 
     expect(handovers).toEqual(['meta_delivery_invalid_request']);
+    expect(metrics).toEqual([
+      {
+        name: 'meta_send_errors_total',
+        labels: { code: 'invalid_request', retryable: 'false' }
+      }
+    ]);
   });
 });

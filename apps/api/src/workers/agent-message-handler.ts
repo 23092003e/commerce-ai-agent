@@ -11,6 +11,7 @@ import {
   type StructuredDecisionProvider
 } from '@fanpage/domain';
 import { MetaChannelError, type MessagingChannel } from '@fanpage/meta';
+import type { OperationalMetrics } from '@fanpage/observability';
 import type { PersistedInboundMessageHandler } from './inbound-message-worker.js';
 import type { ReplyPacer } from './reply-pacer.js';
 import type { CheckoutOrderConfirmationService } from '@fanpage/domain';
@@ -119,6 +120,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       promptVersion: string;
       replyPacer?: ReplyPacer;
       logger?: ErrorLogger;
+      metrics?: OperationalMetrics;
     }
   ) {}
 
@@ -325,6 +327,10 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       });
       if (error instanceof MetaChannelError && error.retryable) throw error;
       if (error instanceof MetaChannelError) {
+        this.input.metrics?.increment('meta_send_errors_total', {
+          code: error.code,
+          retryable: String(error.retryable)
+        });
         await this.input.handovers.request({
           conversationId: message.conversation.id,
           expectedVersion: message.conversation.version,

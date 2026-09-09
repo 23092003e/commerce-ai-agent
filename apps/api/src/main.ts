@@ -23,7 +23,7 @@ import {
   type StructuredDecisionProvider
 } from '@fanpage/domain';
 import { createHash } from 'node:crypto';
-import { createLogger } from '@fanpage/observability';
+import { createLogger, createOperationalMetrics } from '@fanpage/observability';
 import {
   FakeMessagingChannel,
   MetaGraphMessagingChannel,
@@ -38,6 +38,7 @@ import { createHumanReplyPacer } from './workers/reply-pacer.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
+const metrics = createOperationalMetrics(logger);
 const repository = new PostgresCommerceRepository(config.DATABASE_URL);
 const adminRepository = new PostgresAdminRepository(config.DATABASE_URL);
 const queue = new BullMqEventJobQueue(config.REDIS_URL);
@@ -137,7 +138,8 @@ const inboundWorker = new InboundMessageWorker(
     modelName: config.AI_MODEL ?? 'fake',
     promptVersion: SALES_SYSTEM_PROMPT_VERSION,
     replyPacer,
-    logger
+    logger,
+    metrics
   })
 );
 const queueWorker = startBullMqEventWorker(config.REDIS_URL, inboundWorker);
