@@ -160,6 +160,15 @@ pnpm.cmd test:integration
 pnpm.cmd build
 ```
 
+Golden sales-agent evaluations are deterministic and run with the normal test
+suite. They cover 50 release-risk scenarios across product discovery, policy
+knowledge, cart, checkout, inventory, safety, and human handover; no AI or
+Meta credential is used.
+
+```powershell
+pnpm.cmd --filter @fanpage/domain exec vitest run tests/evals.test.ts tests/golden-scenarios.test.ts
+```
+
 `test:integration` requires healthy Postgres and Redis. Stop the local API before running it so the live worker cannot consume test queue jobs.
 
 ```powershell
