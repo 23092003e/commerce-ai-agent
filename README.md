@@ -169,6 +169,15 @@ Meta credential is used.
 pnpm.cmd --filter @fanpage/domain exec vitest run tests/evals.test.ts tests/golden-scenarios.test.ts
 ```
 
+To load-test a locally running API with uniquely signed fixture events, use:
+
+```powershell
+pnpm.cmd load:webhook -- --count 100 --concurrency 10
+```
+
+The script reports accepted/failed requests and p50/p95 request latency. It
+uses `.env` only for the local app secret and never targets a live Page.
+
 `test:integration` requires healthy Postgres and Redis. Stop the local API before running it so the live worker cannot consume test queue jobs.
 
 ```powershell
