@@ -88,6 +88,9 @@ export interface AdminKnowledgeDocumentSummary {
   sourceType: string;
   status: string;
   topics: string[];
+  version: number;
+  embeddingDimensions: number;
+  chunkCount: number;
   updatedAt: string;
 }
 
@@ -291,13 +294,27 @@ export class PostgresAdminRepository {
 
   async listKnowledgeDocuments(): Promise<AdminKnowledgeDocumentSummary[]> {
     const result = await this.pool.query<AdminKnowledgeDocumentSummary>(
-      `SELECT id, title, source_type AS "sourceType", status, topics,
+      `SELECT id, title, source_type AS "sourceType", status, topics, version,
+              embedding_dimensions AS "embeddingDimensions",
+              (SELECT COUNT(*)::integer FROM knowledge_chunks kc
+               WHERE kc.document_id = knowledge_documents.id) AS "chunkCount",
               updated_at::text AS "updatedAt"
        FROM knowledge_documents
        ORDER BY updated_at DESC
        LIMIT 100`
     );
     return result.rows;
+  }
+
+  async archiveKnowledgeDocument(documentId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE knowledge_documents
+       SET status = 'archived', updated_at = now()
+       WHERE id = $1 AND status = 'active'
+       RETURNING id`,
+      [documentId]
+    );
+    return result.rowCount === 1;
   }
 
   async listAgentRuns(): Promise<AdminAgentRunSummary[]> {

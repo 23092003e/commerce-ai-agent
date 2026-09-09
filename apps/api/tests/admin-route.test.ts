@@ -202,6 +202,9 @@ describe('admin operational data routes', () => {
                 sourceType: 'policy',
                 status: 'active',
                 topics: ['shipping'],
+                version: 1,
+                embeddingDimensions: 8,
+                chunkCount: 2,
                 updatedAt: '2026-09-07T00:00:00.000Z'
               }
             ];
@@ -640,6 +643,38 @@ describe('admin operational data routes', () => {
     });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.body).toContain('CAKE-001');
+    await app.close();
+  });
+
+  it('archives an active knowledge document only for an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const documentId = '66666666-6666-4666-8666-666666666666';
+    const archived: string[] = [];
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async archiveKnowledgeDocument(id) {
+            archived.push(id);
+            return true;
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/knowledge/${documentId}`;
+    expect((await app.inject({ method: 'DELETE', url })).statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'DELETE',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(archived).toEqual([documentId]);
     await app.close();
   });
 

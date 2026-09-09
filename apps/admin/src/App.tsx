@@ -82,6 +82,9 @@ interface KnowledgeDocument {
   sourceType: string;
   status: string;
   topics: string[];
+  version: number;
+  embeddingDimensions: number;
+  chunkCount: number;
   updatedAt: string;
 }
 interface AgentRun {
@@ -358,6 +361,21 @@ export default function App() {
       `Knowledge ${JSON.stringify(result).includes('created') ? 're-indexed' : 'already indexed'}.`
     );
     setKnowledgeContent('');
+    await load();
+  }
+  async function archiveKnowledge(documentId: string) {
+    const response = await fetch(
+      `${apiUrl}/internal/admin/knowledge/${documentId}`,
+      {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` }
+      }
+    );
+    if (!response.ok) {
+      setStatus('Could not archive knowledge document. Refresh and try again.');
+      return;
+    }
+    setStatus('Knowledge document archived.');
     await load();
   }
   async function loadOrderDetail(orderId: string) {
@@ -763,13 +781,34 @@ export default function App() {
             </section>
             <DataTable
               title="Knowledge sources"
-              headers={['Document', 'Type', 'Topics', 'Status', 'Updated']}
+              headers={[
+                'Document',
+                'Type',
+                'Version',
+                'Chunks',
+                'Topics',
+                'Status',
+                'Updated',
+                'Action'
+              ]}
               rows={documents.map((item) => [
                 item.title,
                 item.sourceType,
+                `v${String(item.version)} · ${String(item.embeddingDimensions)}d`,
+                item.chunkCount,
                 item.topics.join(', ') || '—',
                 <mark>{item.status}</mark>,
-                formatDate(item.updatedAt)
+                formatDate(item.updatedAt),
+                item.status === 'active' ? (
+                  <button
+                    className="table-button"
+                    onClick={() => void archiveKnowledge(item.id)}
+                  >
+                    Archive
+                  </button>
+                ) : (
+                  '—'
+                )
               ])}
               empty="No knowledge documents yet."
             />

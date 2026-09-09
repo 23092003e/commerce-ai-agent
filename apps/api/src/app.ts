@@ -137,9 +137,13 @@ export interface AdminOperationalData {
       sourceType: string;
       status: string;
       topics: string[];
+      version: number;
+      embeddingDimensions: number;
+      chunkCount: number;
       updatedAt: string;
     }>
   >;
+  archiveKnowledgeDocument?(documentId: string): Promise<boolean>;
   listAgentRuns?(): Promise<
     Array<{
       id: string;
@@ -363,6 +367,30 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       const result = await admin.knowledge.ingest(body.data);
       return reply.code(result.type === 'created' ? 201 : 200).send(result);
     });
+    app.delete(
+      '/internal/admin/knowledge/:documentId',
+      async (request, reply) => {
+        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
+          return reply.code(401).send({ error: 'admin_unauthorized' });
+        }
+        const params = z
+          .object({ documentId: z.uuid() })
+          .safeParse(request.params);
+        if (!params.success)
+          return reply.code(400).send({ error: 'invalid_admin_request' });
+        if (!admin.data?.archiveKnowledgeDocument) {
+          return reply.code(501).send({ error: 'knowledge_unavailable' });
+        }
+        const archived = await admin.data.archiveKnowledgeDocument(
+          params.data.documentId
+        );
+        if (!archived)
+          return reply
+            .code(404)
+            .send({ error: 'knowledge_document_not_found' });
+        return { archived: true };
+      }
+    );
     app.get('/internal/admin/agent-runs', async (request, reply) => {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
         return reply.code(401).send({ error: 'admin_unauthorized' });
