@@ -324,6 +324,13 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         error: errorMessage.slice(0, 500)
       });
       if (error instanceof MetaChannelError && error.retryable) throw error;
+      if (error instanceof MetaChannelError) {
+        await this.input.handovers.request({
+          conversationId: message.conversation.id,
+          expectedVersion: message.conversation.version,
+          reason: `meta_delivery_${error.code}`
+        });
+      }
     }
   }
 }

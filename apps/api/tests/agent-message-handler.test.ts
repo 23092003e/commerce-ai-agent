@@ -275,4 +275,46 @@ describe('AgentMessageHandler', () => {
       retryable: true
     });
   });
+
+  it('hands a conversation to staff after a non-retryable Meta delivery failure', async () => {
+    const handovers: string[] = [];
+    const handler = new AgentMessageHandler({
+      provider: createScriptedDecisionProvider([
+        { type: 'reply', text: 'cannot deliver', evidenceChunkIds: [] }
+      ]),
+      catalog: {} as CatalogService,
+      knowledge: {} as KnowledgeService,
+      cart: {} as CartService,
+      checkout: {} as CheckoutFlow,
+      agentRuns: {
+        async start() {
+          return '44444444-4444-4444-8444-444444444444';
+        },
+        async recordToolCall() {},
+        async complete() {}
+      },
+      handovers: {
+        async request(input) {
+          handovers.push(input.reason);
+        }
+      },
+      channel: {
+        async sendText() {
+          throw new MetaChannelError(
+            'recipient is unavailable',
+            'invalid_request',
+            false,
+            400
+          );
+        }
+      },
+      modelProvider: 'fake',
+      modelName: 'fake',
+      promptVersion: 'test.v1'
+    });
+
+    await handler.handle(message);
+
+    expect(handovers).toEqual(['meta_delivery_invalid_request']);
+  });
 });
