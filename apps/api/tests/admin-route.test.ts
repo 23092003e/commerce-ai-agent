@@ -557,6 +557,26 @@ describe('admin operational data routes', () => {
                 updatedAt: '2026-09-08T00:00:00.000Z'
               }
             ];
+          },
+          async getCartDetail(id) {
+            return id === '44444444-4444-4444-8444-444444444444'
+              ? {
+                  id,
+                  customer: 'Lan',
+                  status: 'active',
+                  currency: 'VND',
+                  items: [
+                    {
+                      sku: 'CAKE-001',
+                      name: 'Signature Cake',
+                      variant: 'Large',
+                      quantity: 2,
+                      unitPrice: '225000',
+                      lineTotal: '450000'
+                    }
+                  ]
+                }
+              : null;
           }
         }
       }
@@ -573,6 +593,53 @@ describe('admin operational data routes', () => {
     });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.body).toContain('450000');
+    await app.close();
+  });
+
+  it('returns a cart detail only to an authorized admin', async () => {
+    const repository = new InMemoryCommerceRepository();
+    const cartId = '44444444-4444-4444-8444-444444444444';
+    const app = buildApp({
+      config: {
+        metaAppSecret: 'a'.repeat(16),
+        metaVerifyToken: 'b'.repeat(16)
+      },
+      admin: {
+        secret,
+        repository,
+        data: {
+          async getCartDetail(id) {
+            return id === cartId
+              ? {
+                  id,
+                  customer: 'Lan',
+                  status: 'active',
+                  currency: 'VND',
+                  items: [
+                    {
+                      sku: 'CAKE-001',
+                      name: 'Signature Cake',
+                      variant: 'Large',
+                      quantity: 2,
+                      unitPrice: '225000',
+                      lineTotal: '450000'
+                    }
+                  ]
+                }
+              : null;
+          }
+        }
+      }
+    });
+    const url = `/internal/admin/carts/${cartId}`;
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    const accepted = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${secret}` }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body).toContain('CAKE-001');
     await app.close();
   });
 

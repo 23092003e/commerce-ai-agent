@@ -119,6 +119,20 @@ interface Cart {
   currency: string;
   updatedAt: string;
 }
+interface CartDetail {
+  id: string;
+  customer: string | null;
+  status: string;
+  currency: string;
+  items: Array<{
+    sku: string;
+    name: string;
+    variant: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+  }>;
+}
 type View =
   | 'inbox'
   | 'customers'
@@ -195,6 +209,15 @@ function isAgentRunDetail(value: unknown): value is { run: AgentRunDetail } {
     value.run !== null
   );
 }
+function isCartDetail(value: unknown): value is { cart: CartDetail } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'cart' in value &&
+    typeof value.cart === 'object' &&
+    value.cart !== null
+  );
+}
 
 export default function App() {
   const [token, setToken] = useState(
@@ -218,6 +241,7 @@ export default function App() {
   const [runDetail, setRunDetail] = useState<AgentRunDetail | null>(null);
   const [handovers, setHandovers] = useState<Handover[]>([]);
   const [carts, setCarts] = useState<Cart[]>([]);
+  const [cartDetail, setCartDetail] = useState<CartDetail | null>(null);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [knowledgeTitle, setKnowledgeTitle] = useState('');
   const [knowledgeContent, setKnowledgeContent] = useState('');
@@ -398,6 +422,21 @@ export default function App() {
       return;
     }
     setRunDetail(data.run);
+  }
+  async function loadCartDetail(cartId: string) {
+    const response = await fetch(`${apiUrl}/internal/admin/carts/${cartId}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      setStatus('Could not load cart detail.');
+      return;
+    }
+    const data: unknown = await response.json();
+    if (!isCartDetail(data)) {
+      setStatus('Admin API returned invalid cart detail.');
+      return;
+    }
+    setCartDetail(data.cart);
   }
   async function resolveHandover(item: Handover) {
     const response = await fetch(
@@ -802,18 +841,43 @@ export default function App() {
           />
         )}
         {view === 'carts' && (
-          <DataTable
-            title="Recent carts"
-            headers={['Customer', 'Status', 'Items', 'Subtotal', 'Updated']}
-            rows={carts.map((item) => [
-              item.customer ?? 'Unknown',
-              <mark>{item.status}</mark>,
-              item.itemCount,
-              formatMoney(item.subtotal, item.currency),
-              formatDate(item.updatedAt)
-            ])}
-            empty="No carts yet."
-          />
+          <>
+            <DataTable
+              title="Recent carts"
+              headers={['Customer', 'Status', 'Items', 'Subtotal', 'Updated']}
+              rows={carts.map((item) => [
+                <button
+                  className="table-button"
+                  onClick={() => void loadCartDetail(item.id)}
+                >
+                  {item.customer ?? 'Unknown'}
+                </button>,
+                <mark>{item.status}</mark>,
+                item.itemCount,
+                formatMoney(item.subtotal, item.currency),
+                formatDate(item.updatedAt)
+              ])}
+              empty="No carts yet."
+            />
+            {cartDetail && (
+              <section className="order-detail">
+                <h2>
+                  Cart <mark>{cartDetail.status}</mark>
+                </h2>
+                <p>{cartDetail.customer ?? 'Unknown customer'}</p>
+                <ul>
+                  {cartDetail.items.map((item) => (
+                    <li key={item.sku}>
+                      {item.name} ({item.variant}) · {item.sku} · x
+                      {String(item.quantity)} ·{' '}
+                      {formatMoney(item.unitPrice, cartDetail.currency)} each ·{' '}
+                      {formatMoney(item.lineTotal, cartDetail.currency)}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </section>
     </main>

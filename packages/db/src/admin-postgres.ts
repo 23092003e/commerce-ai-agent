@@ -121,6 +121,21 @@ export interface AdminCartSummary {
   updatedAt: string;
 }
 
+export interface AdminCartDetail {
+  id: string;
+  customer: string | null;
+  status: string;
+  currency: string;
+  items: Array<{
+    sku: string;
+    name: string;
+    variant: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+  }>;
+}
+
 export class PostgresAdminRepository {
   private readonly pool: Pool;
 
@@ -352,6 +367,31 @@ export class PostgresAdminRepository {
        LIMIT 100`
     );
     return result.rows;
+  }
+
+  async getCartDetail(cartId: string): Promise<AdminCartDetail | null> {
+    const cart = await this.pool.query<Omit<AdminCartDetail, 'items'>>(
+      `SELECT ca.id, COALESCE(cu.display_name, cu.meta_psid) AS customer,
+              ca.status, ca.currency
+       FROM carts ca
+       JOIN customers cu ON cu.id = ca.customer_id
+       WHERE ca.id = $1`,
+      [cartId]
+    );
+    const summary = cart.rows.at(0);
+    if (!summary) return null;
+    const items = await this.pool.query<AdminCartDetail['items'][number]>(
+      `SELECT pv.sku, p.name, pv.title AS variant, ci.quantity,
+              ci.unit_price_snapshot::text AS "unitPrice",
+              (ci.quantity * ci.unit_price_snapshot)::text AS "lineTotal"
+       FROM cart_items ci
+       JOIN products p ON p.id = ci.product_id
+       JOIN product_variants pv ON pv.id = ci.variant_id
+       WHERE ci.cart_id = $1
+       ORDER BY ci.created_at ASC, ci.id ASC`,
+      [cartId]
+    );
+    return { ...summary, items: items.rows };
   }
 
   async close(): Promise<void> {

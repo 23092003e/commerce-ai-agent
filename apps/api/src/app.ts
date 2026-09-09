@@ -176,6 +176,20 @@ export interface AdminOperationalData {
       updatedAt: string;
     }>
   >;
+  getCartDetail?(cartId: string): Promise<{
+    id: string;
+    customer: string | null;
+    status: string;
+    currency: string;
+    items: Array<{
+      sku: string;
+      name: string;
+      variant: string;
+      quantity: number;
+      unitPrice: string;
+      lineTotal: string;
+    }>;
+  } | null>;
 }
 
 export interface BuildAppOptions {
@@ -403,6 +417,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
         return reply.code(401).send({ error: 'admin_unauthorized' });
       return { carts: (await admin.data?.listCarts?.()) ?? [] };
+    });
+    app.get('/internal/admin/carts/:cartId', async (request, reply) => {
+      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
+        return reply.code(401).send({ error: 'admin_unauthorized' });
+      const params = z.object({ cartId: z.uuid() }).safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_admin_request' });
+      const cart = await admin.data?.getCartDetail?.(params.data.cartId);
+      if (!cart) return reply.code(404).send({ error: 'cart_not_found' });
+      return { cart };
     });
     app.post(
       '/internal/admin/conversations/:conversationId/control',
