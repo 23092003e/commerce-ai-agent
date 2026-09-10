@@ -12,6 +12,7 @@ import {
 } from '@fanpage/meta';
 import { z } from 'zod';
 import type { CommerceRepository } from '@fanpage/db';
+import type { OperationalMetrics } from '@fanpage/observability';
 import { isAuthorizedAdmin } from './services/admin-auth.js';
 import type { WebhookIngestion } from './services/webhook-ingestion.js';
 
@@ -201,6 +202,7 @@ export interface BuildAppOptions {
   ingestion?: WebhookIngestion;
   readiness?: { check(): Promise<void> };
   logger?: FastifyBaseLogger;
+  metrics?: OperationalMetrics;
   messagingChannel?: MessagingChannel;
   enableTestMessagingRoutes?: boolean;
   admin?: {
@@ -533,6 +535,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.post('/webhooks/meta', async (request, reply) => {
     const rawBody = request.body;
     if (!Buffer.isBuffer(rawBody)) {
+      options.metrics?.increment('webhook_validation_failures_total', {
+        reason: 'raw_body'
+      });
       return reply.code(400).send({ error: 'raw_body_required' });
     }
 
@@ -541,6 +546,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       typeof signature !== 'string' ||
       !verifyMetaSignature(rawBody, signature, options.config.metaAppSecret)
     ) {
+      options.metrics?.increment('webhook_validation_failures_total', {
+        reason: 'signature'
+      });
       return reply.code(401).send({ error: 'invalid_signature' });
     }
 
@@ -548,11 +556,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     try {
       json = JSON.parse(rawBody.toString('utf8')) as unknown;
     } catch {
+      options.metrics?.increment('webhook_validation_failures_total', {
+        reason: 'json'
+      });
       return reply.code(400).send({ error: 'invalid_json' });
     }
 
     const payload = MetaWebhookPayloadSchema.safeParse(json);
     if (!payload.success) {
+      options.metrics?.increment('webhook_validation_failures_total', {
+        reason: 'payload'
+      });
       return reply.code(400).send({ error: 'invalid_payload' });
     }
 
@@ -563,6 +577,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
           0
         );
 
+    options.metrics?.increment('webhook_events_total', { status: 'accepted' });
     return reply.code(200).send({ accepted });
   });
 

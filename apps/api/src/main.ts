@@ -171,7 +171,8 @@ const app = buildApp({
     async check() {
       await Promise.all([repository.ping(), queue.ping()]);
     }
-  }
+  },
+  metrics
 });
 
 queueWorker.on('failed', (job, error) => {

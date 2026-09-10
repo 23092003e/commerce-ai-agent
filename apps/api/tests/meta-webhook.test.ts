@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { OperationalMetrics } from '@fanpage/observability';
 import { buildApp } from '../src/app.js';
 
 const config = {
@@ -40,7 +41,14 @@ describe('Meta webhook HTTP contract', () => {
   });
 
   it('accepts a payload with a valid signature', async () => {
-    const app = buildApp({ config });
+    const metrics: Array<{ name: string; labels: Record<string, string> }> = [];
+    const metricEmitter: OperationalMetrics = {
+      increment(name, labels = {}) {
+        metrics.push({ name, labels });
+      },
+      observe() {}
+    };
+    const app = buildApp({ config, metrics: metricEmitter });
     apps.push(app);
     const payload = JSON.stringify({ object: 'page', entry: [] });
     const signature = createHmac('sha256', config.metaAppSecret)
@@ -59,6 +67,9 @@ describe('Meta webhook HTTP contract', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ accepted: 0 });
+    expect(metrics).toEqual([
+      { name: 'webhook_events_total', labels: { status: 'accepted' } }
+    ]);
   });
 
   it('rejects an invalid signature before parsing JSON', async () => {
