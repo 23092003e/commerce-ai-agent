@@ -611,6 +611,9 @@ describe('admin operational data routes', () => {
         secret,
         repository,
         data: {
+          async listConversations() {
+            return [];
+          },
           async getCartDetail(id) {
             return id === cartId
               ? {
@@ -659,6 +662,9 @@ describe('admin operational data routes', () => {
         secret,
         repository,
         data: {
+          async listConversations() {
+            return [];
+          },
           async archiveKnowledgeDocument(id) {
             archived.push(id);
             return true;
