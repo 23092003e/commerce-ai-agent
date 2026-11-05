@@ -1,5 +1,7 @@
 # Production Readiness Evidence
 
+> **Current status, 2026-11-05:** local portfolio candidate only. See the [local progress ledger](releases/2026-11-05-progress.md) for the latest test totals and smoke/restore evidence. No VPS, public deployment, live Meta validation, off-host restore, alert delivery or exact deployed revision is confirmed. The historical values below do not certify the current revision.
+
 This checklist maps Phase 10 readiness requirements to evidence. Items marked
 **manual** require the Page owner or deployment operator and cannot be asserted
 from this repository.

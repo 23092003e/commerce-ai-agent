@@ -98,7 +98,7 @@ export class MetaGraphMessagingChannel implements MessagingChannel {
       throw new MetaChannelError(
         isTimeout ? 'Meta Send API timed out' : 'Meta Send API network failure',
         isTimeout ? 'timeout' : 'network',
-        true
+        false
       );
     }
 
@@ -114,7 +114,7 @@ export class MetaGraphMessagingChannel implements MessagingChannel {
       throw new MetaChannelError(
         `Meta Send API failed with status ${String(response.status)}`,
         code,
-        response.status === 429 || response.status >= 500,
+        response.status === 429,
         response.status
       );
     }

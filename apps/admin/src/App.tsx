@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import './App.css';
+import { adminRequest } from './api';
 
 interface Conversation {
   id: string;
@@ -150,7 +151,7 @@ const configuredApiUrl: unknown = import.meta.env.VITE_API_URL;
 const apiUrl =
   typeof configuredApiUrl === 'string' && configuredApiUrl.length > 0
     ? configuredApiUrl
-    : 'http://127.0.0.1:3000';
+    : '';
 
 function hasArray(
   value: unknown,
@@ -223,9 +224,8 @@ function isCartDetail(value: unknown): value is { cart: CartDetail } {
 }
 
 export default function App() {
-  const [token, setToken] = useState(
-    () => localStorage.getItem('admin-token') ?? ''
-  );
+  const [token, setToken] = useState('');
+  const [csrfToken, setCsrfToken] = useState('');
   const [view, setView] = useState<View>('inbox');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -251,9 +251,78 @@ export default function App() {
   const [knowledgeTopics, setKnowledgeTopics] = useState('');
   const [status, setStatus] = useState('Enter the admin token to connect.');
 
+  async function adminFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+    const response = await adminRequest(input, init);
+    if (response.status === 401) {
+      setCsrfToken('');
+      setConversations([]);
+      setSelected(null);
+      setOrders([]);
+      setProducts([]);
+      setCustomers([]);
+      setDocuments([]);
+      setRuns([]);
+      setHandovers([]);
+      setCarts([]);
+      setOrderDetail(null);
+      setProductDetail(null);
+      setCustomerDetail(null);
+      setRunDetail(null);
+      setCartDetail(null);
+      setMessages([]);
+      setStatus('Session expired. Connect again.');
+    }
+    return response;
+  }
+  async function login() {
+    const response = await fetch(`${apiUrl}/internal/admin/session`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ secret: token })
+    });
+    if (!response.ok) {
+      setStatus('Could not sign in.');
+      return;
+    }
+    const session: unknown = await response.json();
+    setToken('');
+    if (
+      typeof session === 'object' &&
+      session !== null &&
+      'csrfToken' in session &&
+      typeof session.csrfToken === 'string'
+    )
+      setCsrfToken(session.csrfToken);
+  }
+  async function logout() {
+    const response = await adminFetch(`${apiUrl}/internal/admin/session`, {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken }
+    });
+    if (response.ok) {
+      setCsrfToken('');
+      setSelected(null);
+      setConversations([]);
+      setOrders([]);
+      setProducts([]);
+      setCustomers([]);
+      setDocuments([]);
+      setRuns([]);
+      setHandovers([]);
+      setCarts([]);
+      setStatus('Signed out.');
+      setMessages([]);
+      setOrderDetail(null);
+      setProductDetail(null);
+      setCustomerDetail(null);
+      setRunDetail(null);
+      setCartDetail(null);
+    }
+  }
   async function fetchList<T>(path: string, key: string): Promise<T[]> {
-    const response = await fetch(`${apiUrl}${path}`, {
-      headers: { authorization: `Bearer ${token}` }
+    const response = await adminFetch(`${apiUrl}${path}`, {
+      headers: { 'X-CSRF-Token': csrfToken }
     });
     if (response.status === 401) throw new Error('Invalid admin token.');
     if (!response.ok) throw new Error(`Could not load ${key}.`);
@@ -263,7 +332,6 @@ export default function App() {
     return data[key] as T[];
   }
   async function load() {
-    localStorage.setItem('admin-token', token);
     try {
       const [
         nextConversations,
@@ -310,12 +378,12 @@ export default function App() {
   }
   async function setMode(controlMode: Conversation['controlMode']) {
     if (!selected) return;
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/conversations/${selected.id}/control`,
       {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          'X-CSRF-Token': csrfToken,
           'content-type': 'application/json'
         },
         body: JSON.stringify({ expectedVersion: selected.version, controlMode })
@@ -332,10 +400,10 @@ export default function App() {
     await load();
   }
   async function ingestKnowledge() {
-    const response = await fetch(`${apiUrl}/internal/admin/knowledge`, {
+    const response = await adminFetch(`${apiUrl}/internal/admin/knowledge`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${token}`,
+        'X-CSRF-Token': csrfToken,
         'content-type': 'application/json'
       },
       body: JSON.stringify({
@@ -364,11 +432,11 @@ export default function App() {
     await load();
   }
   async function archiveKnowledge(documentId: string) {
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/knowledge/${documentId}`,
       {
         method: 'DELETE',
-        headers: { authorization: `Bearer ${token}` }
+        headers: { 'X-CSRF-Token': csrfToken }
       }
     );
     if (!response.ok) {
@@ -379,9 +447,12 @@ export default function App() {
     await load();
   }
   async function loadOrderDetail(orderId: string) {
-    const response = await fetch(`${apiUrl}/internal/admin/orders/${orderId}`, {
-      headers: { authorization: `Bearer ${token}` }
-    });
+    const response = await adminFetch(
+      `${apiUrl}/internal/admin/orders/${orderId}`,
+      {
+        headers: { 'X-CSRF-Token': csrfToken }
+      }
+    );
     if (!response.ok) {
       setStatus('Could not load order detail.');
       return;
@@ -394,9 +465,9 @@ export default function App() {
     setOrderDetail(data.order);
   }
   async function loadProductDetail(productId: string) {
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/products/${productId}`,
-      { headers: { authorization: `Bearer ${token}` } }
+      { headers: { 'X-CSRF-Token': csrfToken } }
     );
     if (!response.ok) {
       setStatus('Could not load product detail.');
@@ -410,9 +481,9 @@ export default function App() {
     setProductDetail(data.product);
   }
   async function loadCustomerDetail(customerId: string) {
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/customers/${customerId}`,
-      { headers: { authorization: `Bearer ${token}` } }
+      { headers: { 'X-CSRF-Token': csrfToken } }
     );
     if (!response.ok) {
       setStatus('Could not load customer detail.');
@@ -426,9 +497,9 @@ export default function App() {
     setCustomerDetail(data.customer);
   }
   async function loadRunDetail(runId: string) {
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/agent-runs/${runId}`,
-      { headers: { authorization: `Bearer ${token}` } }
+      { headers: { 'X-CSRF-Token': csrfToken } }
     );
     if (!response.ok) {
       setStatus('Could not load agent trace.');
@@ -442,9 +513,12 @@ export default function App() {
     setRunDetail(data.run);
   }
   async function loadCartDetail(cartId: string) {
-    const response = await fetch(`${apiUrl}/internal/admin/carts/${cartId}`, {
-      headers: { authorization: `Bearer ${token}` }
-    });
+    const response = await adminFetch(
+      `${apiUrl}/internal/admin/carts/${cartId}`,
+      {
+        headers: { 'X-CSRF-Token': csrfToken }
+      }
+    );
     if (!response.ok) {
       setStatus('Could not load cart detail.');
       return;
@@ -457,12 +531,12 @@ export default function App() {
     setCartDetail(data.cart);
   }
   async function resolveHandover(item: Handover) {
-    const response = await fetch(
+    const response = await adminFetch(
       `${apiUrl}/internal/admin/handovers/${item.conversationId}/resolve`,
       {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          'X-CSRF-Token': csrfToken,
           'content-type': 'application/json'
         },
         body: JSON.stringify({ expectedVersion: item.version })
@@ -479,10 +553,25 @@ export default function App() {
     await load();
   }
   useEffect(() => {
-    if (token) void load();
+    window.localStorage.removeItem('admin-token');
+    window.sessionStorage.removeItem('admin-token');
+    void fetch(`${apiUrl}/internal/admin/session`, {
+      credentials: 'same-origin'
+    }).then(async (response) => {
+      if (response.ok) {
+        const session: unknown = await response.json();
+        if (
+          typeof session === 'object' &&
+          session !== null &&
+          'csrfToken' in session &&
+          typeof session.csrfToken === 'string'
+        )
+          setCsrfToken(session.csrfToken);
+      }
+    });
   }, []);
   useEffect(() => {
-    if (!token || !selected) {
+    if (!csrfToken || !selected) {
       setMessages([]);
       return;
     }
@@ -497,6 +586,9 @@ export default function App() {
         )
       );
   }, [selected?.id]);
+  useEffect(() => {
+    if (csrfToken) void load();
+  }, [csrfToken]);
   const navigation: Array<{ id: View; label: string }> = [
     { id: 'inbox', label: 'Inbox' },
     { id: 'customers', label: 'Customers' },
@@ -543,13 +635,14 @@ export default function App() {
         </header>
         <div className="auth">
           <input
-            aria-label="Admin token"
+            aria-label="Admin secret"
             type="password"
             value={token}
             onChange={(event) => setToken(event.target.value)}
-            placeholder="Admin bearer token"
+            placeholder="Admin secret"
           />
-          <button onClick={() => void load()}>Connect</button>
+          <button onClick={() => void login()}>Connect</button>
+          <button onClick={() => void logout()}>Log out</button>
           <em>{status}</em>
         </div>
         {view === 'inbox' && (

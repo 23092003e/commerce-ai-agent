@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   char,
   index,
   integer,
@@ -50,6 +51,9 @@ export const messageType = pgEnum('message_type', [
   'system'
 ]);
 export const messageDeliveryState = pgEnum('message_delivery_state', [
+  'sending',
+  'retryable',
+  'unknown',
   'received',
   'queued',
   'sent',
@@ -190,6 +194,16 @@ export const messages = pgTable(
       .notNull()
       .references(() => conversations.id),
     metaMessageId: text('meta_message_id'),
+    inboundMessageId: uuid('inbound_message_id'),
+    recipientId: text('recipient_id'),
+    outboundKey: text('outbound_key'),
+    attempts: integer().notNull().default(0),
+    lastErrorCode: text('last_error_code'),
+    lastError: text('last_error'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    deliveryUpdatedAt: timestamp('delivery_updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     direction: messageDirection().notNull(),
     senderType: messageSenderType('sender_type').notNull(),
     messageType: messageType('message_type').notNull(),
@@ -204,7 +218,15 @@ export const messages = pgTable(
   (table) => [
     uniqueIndex('messages_meta_message_id_unique')
       .on(table.metaMessageId)
-      .where(sql`${table.metaMessageId} IS NOT NULL`)
+      .where(sql`${table.metaMessageId} IS NOT NULL`),
+    uniqueIndex('messages_outbound_key_unique')
+      .on(table.outboundKey)
+      .where(sql`${table.outboundKey} IS NOT NULL`),
+    index('messages_inbound_delivery').on(
+      table.inboundMessageId,
+      table.deliveryState
+    ),
+    check('messages_attempts_check', sql`${table.attempts} >= 0`)
   ]
 );
 
@@ -215,6 +237,7 @@ export const agentRuns = pgTable('agent_runs', {
     .references(() => conversations.id),
   inboundMessageId: uuid('inbound_message_id')
     .notNull()
+    .unique('agent_runs_one_per_inbound_message')
     .references(() => messages.id),
   modelProvider: text('model_provider').notNull(),
   modelName: text('model_name').notNull(),
@@ -262,6 +285,16 @@ export const checkoutDrafts = pgTable('checkout_drafts', {
   paymentMethod: paymentMethod('payment_method'),
   confirmationId: text('confirmation_id'),
   confirmationSnapshot: jsonb('confirmation_snapshot'),
+  confirmationPreparedAt: timestamp('confirmation_prepared_at', {
+    withTimezone: true
+  }),
+  confirmationExpiresAt: timestamp('confirmation_expires_at', {
+    withTimezone: true
+  }),
+  confirmationConsumedAt: timestamp('confirmation_consumed_at', {
+    withTimezone: true
+  }),
+  confirmationLines: jsonb('confirmation_lines'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -293,20 +326,31 @@ export const cartItems = pgTable('cart_items', {
     .defaultNow()
 });
 
-export const toolCalls = pgTable('tool_calls', {
-  id: uuid().primaryKey().defaultRandom(),
-  agentRunId: uuid('agent_run_id')
-    .notNull()
-    .references(() => agentRuns.id),
-  toolName: text('tool_name').notNull(),
-  arguments: jsonb().notNull().default({}),
-  resultSummary: jsonb('result_summary').notNull().default({}),
-  status: toolCallStatus().notNull(),
-  latencyMs: integer('latency_ms').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow()
-});
+export const toolCalls = pgTable(
+  'tool_calls',
+  {
+    step: integer().notNull(),
+    id: uuid().primaryKey().defaultRandom(),
+    agentRunId: uuid('agent_run_id')
+      .notNull()
+      .references(() => agentRuns.id),
+    toolName: text('tool_name').notNull(),
+    arguments: jsonb().notNull().default({}),
+    resultSummary: jsonb('result_summary').notNull().default({}),
+    status: toolCallStatus().notNull(),
+    latencyMs: integer('latency_ms').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+  },
+  (table) => [
+    uniqueIndex('tool_calls_agent_run_step_unique').on(
+      table.agentRunId,
+      table.step
+    ),
+    check('tool_calls_positive_step', sql`${table.step} > 0`)
+  ]
+);
 
 export const webhookEvents = pgTable(
   'webhook_events',

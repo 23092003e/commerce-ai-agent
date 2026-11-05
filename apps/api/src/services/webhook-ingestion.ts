@@ -21,7 +21,8 @@ export function createWebhookIngestionService(dependencies: {
         const stored = await dependencies.repository.storeWebhookEvent(event);
         if (
           stored.processingState !== 'processed' &&
-          stored.processingState !== 'ignored'
+          stored.processingState !== 'ignored' &&
+          stored.processingState !== 'failed'
         ) {
           await dependencies.queue.enqueue(event.externalEventKey);
           await dependencies.repository.markWebhookEventQueued(

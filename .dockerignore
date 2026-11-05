@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+!.env.example
+!.env.production.example
+**/node_modules
+**/dist
+.pnpm-store
+.repair
+.superpowers
+coverage
+backups
+graphify-out
+*.log
+**/*.tsbuildinfo
+.vscode
+.idea

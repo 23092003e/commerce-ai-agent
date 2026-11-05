@@ -1,0 +1,87 @@
+name: fanpage-portfolio
+
+x-app: &app
+  image: fanpage-sales-agent:${RELEASE_TAG:?Set RELEASE_TAG to the release commit}
+  build:
+    context: .
+    args:
+      REVISION: ${RELEASE_TAG}
+  env_file: ${APP_ENV_FILE:-.env.production}
+  environment:
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: 3000
+    DATABASE_URL: postgres://fanpage:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/fanpage_sales_agent
+    REDIS_URL: redis://redis:6379
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fanpage_sales_agent
+      POSTGRES_USER: fanpage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fanpage -d fanpage_sales_agent']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 768m
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '256mb',
+        '--maxmemory-policy',
+        'noeviction'
+      ]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+
+  migrate:
+    <<: *app
+    command: ['node', 'packages/db/dist/migrate-cli.js']
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 768m
+    stop_grace_period: 45s
+
+volumes:
+  postgres-data:
+  redis-data:

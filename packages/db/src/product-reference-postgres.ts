@@ -25,7 +25,12 @@ export class PostgresProductReferenceStore implements ProductReferenceStore {
         const [product] = await tx
           .select({ id: schema.products.id })
           .from(schema.products)
-          .where(eq(schema.products.id, reference.productId))
+          .where(
+            and(
+              eq(schema.products.id, reference.productId),
+              eq(schema.products.status, 'active')
+            )
+          )
           .limit(1);
         if (!product) return { type: 'invalid_reference' };
 
@@ -36,7 +41,8 @@ export class PostgresProductReferenceStore implements ProductReferenceStore {
             .where(
               and(
                 eq(schema.productVariants.id, reference.variantId),
-                eq(schema.productVariants.productId, reference.productId)
+                eq(schema.productVariants.productId, reference.productId),
+                eq(schema.productVariants.status, 'active')
               )
             )
             .limit(1);

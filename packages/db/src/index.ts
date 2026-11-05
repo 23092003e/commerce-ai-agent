@@ -12,6 +12,10 @@ export { PostgresProductReferenceStore } from './product-reference-postgres.js';
 export { runMigrations } from './migrate.js';
 export * as schema from './schema.js';
 export type {
+  ConversationLeaseContext,
+  OutboundMessageView,
+  OutboundMessageRepository,
+  OutboundDeliveryState,
   CommerceRepository,
   ConversationControlMode,
   ConversationView,
@@ -25,3 +29,7 @@ export type {
   WebhookEventClaimResult,
   WebhookProcessingState
 } from './types.js';
+export { PostgresOutboundMessageRepository } from './outbound-message-postgres.js';
+export { InMemoryOutboundMessageRepository } from './outbound-message-memory.js';
+export { PostgresConversationContextRepository } from './conversation-context-postgres.js';
+export { PostgresConversationSummaryRepository } from './conversation-summary-postgres.js';

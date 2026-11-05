@@ -26,6 +26,8 @@ export const KnowledgeSearchSchema = z
 
 export interface EmbeddingProvider {
   readonly dimensions: number;
+  readonly provider?: string;
+  readonly model?: string;
   embed(text: string): Promise<number[]>;
 }
 export interface PreparedKnowledgeChunk {
@@ -38,6 +40,9 @@ export interface PreparedKnowledgeChunk {
 export interface PreparedKnowledgeDocument {
   sourceKey: string;
   embeddingDimensions: number;
+  embeddingProvider: string;
+  embeddingModel: string;
+  normalizedContent: string;
   title: string;
   sourceType: 'policy' | 'faq' | 'guide' | 'script';
   sourceUri?: string;
@@ -64,11 +69,17 @@ export interface KnowledgeRepository {
     query: string;
     topics?: string[];
     topK: number;
+    provider: string;
+    model: string;
+    dimensions: number;
   }): Promise<KnowledgeSearchHit[]>;
   searchSemantic(input: {
     embedding: number[];
     topics?: string[];
     topK: number;
+    provider: string;
+    model: string;
+    dimensions: number;
   }): Promise<KnowledgeSearchHit[]>;
 }
 export type KnowledgeSearchResult =
@@ -155,6 +166,8 @@ export function createDeterministicEmbeddingProvider(
     throw new Error('Embedding dimensions must be an integer from 2 to 4096');
   return {
     dimensions,
+    provider: 'deterministic',
+    model: `legacy-${String(dimensions)}d`,
     async embed(text) {
       const vector = Array<number>(dimensions).fill(0);
       for (const token of words(text.toLocaleLowerCase('en-US'))) {
@@ -222,6 +235,10 @@ export function createKnowledgeService(
       return repository.ingest({
         sourceKey: parsed.sourceKey ?? parsed.sourceUri ?? parsed.title,
         embeddingDimensions: embeddings.dimensions,
+        embeddingProvider: embeddings.provider ?? 'deterministic',
+        embeddingModel:
+          embeddings.model ?? `legacy-${String(embeddings.dimensions)}d`,
+        normalizedContent: content,
         title: parsed.title,
         sourceType: parsed.sourceType,
         ...(parsed.sourceUri === undefined
@@ -237,6 +254,9 @@ export function createKnowledgeService(
       const embedding = await embed(parsed.query);
       const searchInput = {
         query: parsed.query,
+        provider: embeddings.provider ?? 'deterministic',
+        model: embeddings.model ?? `legacy-${String(embeddings.dimensions)}d`,
+        dimensions: embeddings.dimensions,
         topK: parsed.topK,
         ...(parsed.topics === undefined ? {} : { topics: parsed.topics })
       };

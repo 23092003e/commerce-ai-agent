@@ -1,33 +1,36 @@
 import { z } from 'zod';
 import {
-  CheckoutSnapshotSchema,
-  type CheckoutSnapshot,
+  PreparedCheckoutSnapshotSchema,
+  type PreparedCheckoutSnapshot,
   verifyCheckoutConfirmation
 } from './checkout.js';
 
 const CreateConfirmedOrderSchema = z
   .object({
     confirmationId: z.string().min(1).max(200),
-    snapshot: CheckoutSnapshotSchema
+    snapshot: PreparedCheckoutSnapshotSchema
   })
   .strict();
 export interface ConfirmedOrderRepository {
   createConfirmed(
-    snapshot: CheckoutSnapshot,
-    confirmationId: string
-  ): Promise<{ orderId: string; orderNumber: string }>;
+    snapshot: PreparedCheckoutSnapshot,
+    confirmationId: string,
+    confirmationMessageTimestamp: number
+  ): Promise<{ orderId: string; orderNumber: string; replayed?: boolean }>;
 }
 export interface OrderService {
   createConfirmed(
-    input: unknown
-  ): Promise<{ orderId: string; orderNumber: string }>;
+    input: unknown,
+    confirmationMessageTimestamp: number
+  ): Promise<{ orderId: string; orderNumber: string; replayed?: boolean }>;
 }
 export function createOrderService(input: {
   confirmationSecret: string;
   repository: ConfirmedOrderRepository;
 }): OrderService {
   return {
-    async createConfirmed(value) {
+    async createConfirmed(value, confirmationMessageTimestamp) {
+      z.number().int().nonnegative().parse(confirmationMessageTimestamp);
       const request = CreateConfirmedOrderSchema.parse(value);
       if (
         !verifyCheckoutConfirmation(
@@ -40,7 +43,8 @@ export function createOrderService(input: {
       }
       return input.repository.createConfirmed(
         request.snapshot,
-        request.confirmationId
+        request.confirmationId,
+        confirmationMessageTimestamp
       );
     }
   };

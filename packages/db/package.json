@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "production": "./dist/index.js",
+      "default": "./src/index.ts"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -18,5 +21,9 @@
   },
   "devDependencies": {
     "@types/pg": "^8.15.6"
-  }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ]
 }

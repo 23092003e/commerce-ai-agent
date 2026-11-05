@@ -2,7 +2,7 @@
 
 A TypeScript sales-assistant service for Facebook Pages. It receives Messenger webhooks, persists each event, processes conversations in order, uses grounded catalog and knowledge tools, and replies through either an AI or human-controlled mode.
 
-> The project is running end-to-end with the Meta Graph API, Cloudflare Tunnel, and OpenRouter. The **Banh May Atelier** catalog is fictional demonstration data, not real business data.
+> Portfolio demonstration using the fictional **Banh May Atelier** bakery. Public deployment is pending verification; local tests do not establish live Meta availability. The application supports the Meta Graph API, OpenRouter/OpenAI-compatible AI, and real embedding providers.
 
 ## Architecture
 
@@ -111,6 +111,8 @@ Pacing uses an asynchronous timer, never a busy wait. Set `HUMAN_REPLY_DELAY_ENA
 
 ## Cloudflare Tunnel
 
+For a continuously running Linux server, use the [VPS deployment runbook](docs/runbooks/vps-deploy.md) and the production Compose + Caddy profile. The proposed domain is `demo.boywithlycoris.online`; no public URL is claimed live until verified. A VPS has not yet been provisioned.
+
 1. Create a managed tunnel in Cloudflare Zero Trust.
 2. Create a public hostname, such as `api.example.com`.
 3. Route that hostname to `http://localhost:3000`.
@@ -118,6 +120,14 @@ Pacing uses an asynchronous timer, never a busy wait. Set `HUMAN_REPLY_DELAY_ENA
 5. Check `https://api.example.com/ready` before verifying the Meta callback.
 
 The machine that hosts the tunnel, API, Docker, PostgreSQL, and Redis must remain online for the bot to operate.
+
+## Production image and Admin
+
+The non-root multi-stage Docker image runs compiled JavaScript and serves Admin at `/admin/` on the same origin. Production requires real Meta, AI and embedding configuration, an HTTPS `APP_BASE_URL`, and independent Admin/metrics secrets. See `.env.production.example` and [deployment](docs/runbooks/deploy.md).
+
+Admin uses a signed HttpOnly/SameSite session, CSRF tokens, origin checks, expiration, rate limits and logout. The signing secret is never stored in browser localStorage. Legacy bearer access is development-only and must be explicitly enabled. Logout revocation and rate-limit state are process-local for the single-instance demo; multi-replica operation requires shared state, and a process restart clears revocations. Rotate the signing secret to invalidate all existing sessions.
+
+Prometheus output is protected at `/internal/metrics`; use an Admin session or the separate metrics bearer secret. Metric labels use fixed allowlists and exclude customer text/identifiers. Alert routing still requires an external monitoring setup and a controlled notification test.
 
 ## Bakery demonstration catalog
 
@@ -175,8 +185,7 @@ To load-test a locally running API with uniquely signed fixture events, use:
 pnpm.cmd load:webhook -- --count 100 --concurrency 10
 ```
 
-The script reports accepted/failed requests and p50/p95 request latency. It
-uses `.env` only for the local app secret and never targets a live Page.
+The script reports a unique run ID, accepted/failed requests, terminal processing/delivery totals and p50/p95/p99 acknowledgment and complete-turn latency. It reads optional `.env.load`, requires the isolated `fanpage_sales_agent_test` database and refuses an API without the non-production fake messaging surface. A remote fake target additionally requires `--allow-remote --run-label <label>`. Stop the load API before running integration tests, which recreate the isolated test schema.
 
 `test:integration` requires healthy Postgres and Redis. Stop the local API before running it so the live worker cannot consume test queue jobs.
 
@@ -186,12 +195,32 @@ pnpm.cmd fixture:send
 
 The fixture signs the raw payload using the local app secret. Change its Meta message ID to send it again because duplicate IDs are intentionally deduplicated.
 
+## Retrieval provenance and evaluations
+
+Production selects explicit OpenAI-compatible embeddings with validated dimensions, timeouts and vector normalization. Documents are versioned by source, content hash, provider, model and dimensions; queries exclude incompatible provenance. Historical demo documents without retained source require approved source re-import.
+
+The reindex command defaults to no implicit action and requires one mode. Configure destination provider settings through a private environment, then preview before executing:
+
+```powershell
+pnpm.cmd knowledge:reindex -- --source-provider deterministic --dry-run
+pnpm.cmd knowledge:reindex -- --source-provider deterministic --execute
+```
+
+Real-provider evaluation is separate and opt-in; it may spend API credits and is never run by normal CI:
+
+```powershell
+pnpm.cmd eval:live-agent -- --live
+```
+
+See [recruiter walkthrough and CV wording](docs/portfolio-demo.md) and the [release ledger](docs/releases/2026-11-05-progress.md).
+
 ## Database and current limitations
 
 Migrations in `packages/db/migrations` are immutable. The runner records each SHA-256 checksum in `schema_migrations`. Recover production with a forward migration or database restore; never edit an applied migration.
 
-- The admin UI is still demonstrative.
-- Dedicated outbound-delivery persistence and retry handling are not complete.
+- The Admin UI and fictional catalog are intended for demonstration.
+- Durable outbound intents resume definitive retryable rejections using stored text. Ambiguous delivery requires human follow-up; external delivery is not exactly-once.
+- Free hosting capacity/availability and AI provider credits are separate from application correctness.
 - Demo catalog and FAQ content must be replaced with approved store data before public launch.
 - Meta App Review and production permissions depend on the Page owner's Meta account.
 

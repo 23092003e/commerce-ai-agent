@@ -1,6 +1,9 @@
 import { loadConfig } from '@fanpage/config';
 import {
   PostgresAgentRunRepository,
+  PostgresConversationContextRepository,
+  PostgresConversationSummaryRepository,
+  PostgresOutboundMessageRepository,
   PostgresAdminRepository,
   PostgresCartRepository,
   PostgresCatalogRepository,
@@ -16,6 +19,7 @@ import {
   createCheckoutFlow,
   createCheckoutOrderConfirmationService,
   createDeterministicEmbeddingProvider,
+  createOpenAiEmbeddingProvider,
   createKnowledgeService,
   createOpenAiDecisionProvider,
   createOrderService,
@@ -23,6 +27,7 @@ import {
   type StructuredDecisionProvider
 } from '@fanpage/domain';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { createLogger, createOperationalMetrics } from '@fanpage/observability';
 import {
   FakeMessagingChannel,
@@ -35,6 +40,7 @@ import { createWebhookIngestionService } from './services/webhook-ingestion.js';
 import { AgentMessageHandler } from './workers/agent-message-handler.js';
 import { InboundMessageWorker } from './workers/inbound-message-worker.js';
 import { createHumanReplyPacer } from './workers/reply-pacer.js';
+import { createFakeDecisionProvider } from './services/fake-decision.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -67,10 +73,26 @@ const checkoutDraftRepository = new PostgresCheckoutDraftRepository(
 const orderRepository = new PostgresOrderRepository(config.DATABASE_URL);
 const handoverRepository = new PostgresHandoverRepository(config.DATABASE_URL);
 const agentRunRepository = new PostgresAgentRunRepository(config.DATABASE_URL);
+const outboundRepository = new PostgresOutboundMessageRepository(
+  config.DATABASE_URL
+);
+const contextRepository = new PostgresConversationContextRepository(
+  config.DATABASE_URL
+);
+const summaryRepository = new PostgresConversationSummaryRepository(
+  config.DATABASE_URL
+);
 const catalog = createCatalogService(catalogRepository);
 const knowledge = createKnowledgeService(
   knowledgeRepository,
-  createDeterministicEmbeddingProvider(8)
+  config.EMBEDDING_PROVIDER === 'openai-compatible'
+    ? createOpenAiEmbeddingProvider({
+        apiKey: config.EMBEDDING_API_KEY ?? '',
+        model: config.EMBEDDING_MODEL ?? '',
+        baseUrl: config.EMBEDDING_BASE_URL ?? '',
+        dimensions: config.EMBEDDING_DIMENSIONS
+      })
+    : createDeterministicEmbeddingProvider(config.EMBEDDING_DIMENSIONS)
 );
 const cart = createCartService({ catalog, repository: cartRepository });
 const checkout = createCheckoutFlow(checkoutDraftRepository);
@@ -78,8 +100,7 @@ const checkoutOrderConfirmation = createCheckoutOrderConfirmationService({
   confirmationSecret: createHash('sha256')
     .update(config.META_APP_SECRET)
     .digest('hex'),
-  checkout: checkoutDraftRepository,
-  carts: cartRepository,
+  confirmations: checkoutDraftRepository,
   orders: createOrderService({
     confirmationSecret: createHash('sha256')
       .update(config.META_APP_SECRET)
@@ -96,19 +117,7 @@ const replyPacer = createHumanReplyPacer({
 
 function createDecisionProvider(): StructuredDecisionProvider {
   if (config.AI_PROVIDER === 'fake') {
-    const decision =
-      config.META_ADAPTER === 'fake'
-        ? {
-            type: 'reply' as const,
-            text: 'Đây là phản hồi kiểm thử từ sales agent.',
-            evidenceChunkIds: []
-          }
-        : { type: 'handover' as const, reason: 'ai_provider_not_configured' };
-    return {
-      async decide() {
-        return decision;
-      }
-    };
+    return createFakeDecisionProvider(config.META_ADAPTER);
   }
   if (!config.AI_API_KEY || !config.AI_MODEL) {
     throw new Error('AI_API_KEY and AI_MODEL are required for the AI provider');
@@ -132,6 +141,10 @@ const inboundWorker = new InboundMessageWorker(
     checkout,
     checkoutOrderConfirmation,
     agentRuns: agentRunRepository,
+    outbound: outboundRepository,
+    contextRepository,
+    summaryRepository,
+    repository,
     handovers: handoverRepository,
     channel: messagingChannel,
     modelProvider: config.AI_PROVIDER,
@@ -140,10 +153,18 @@ const inboundWorker = new InboundMessageWorker(
     replyPacer,
     logger,
     metrics
-  })
+  }),
+  handoverRepository,
+  metrics
 );
 const queueWorker = startBullMqEventWorker(config.REDIS_URL, inboundWorker);
 const app = buildApp({
+  ...(config.METRICS_AUTH_SECRET
+    ? { metricsAuthSecret: config.METRICS_AUTH_SECRET }
+    : {}),
+  adminAssetsDirectory: fileURLToPath(
+    new URL('../../admin/dist/', import.meta.url)
+  ),
   config: {
     metaAppSecret: config.META_APP_SECRET,
     metaVerifyToken: config.META_VERIFY_TOKEN
@@ -155,6 +176,15 @@ const app = buildApp({
     config.NODE_ENV !== 'production' && config.META_ADAPTER === 'fake',
   admin: config.ADMIN_AUTH_SECRET
     ? {
+        session: {
+          production: config.NODE_ENV === 'production',
+          baseUrl: config.APP_BASE_URL,
+          allowedOrigins:
+            config.NODE_ENV === 'production'
+              ? []
+              : config.ADMIN_ALLOWED_ORIGINS,
+          legacyBearerEnabled: config.ADMIN_LEGACY_BEARER_ENABLED
+        },
         secret: config.ADMIN_AUTH_SECRET,
         repository,
         data: adminRepository,
@@ -162,6 +192,15 @@ const app = buildApp({
         handovers: handoverRepository
       }
     : {
+        session: {
+          production: config.NODE_ENV === 'production',
+          baseUrl: config.APP_BASE_URL,
+          allowedOrigins:
+            config.NODE_ENV === 'production'
+              ? []
+              : config.ADMIN_ALLOWED_ORIGINS,
+          legacyBearerEnabled: config.ADMIN_LEGACY_BEARER_ENABLED
+        },
         repository,
         data: adminRepository,
         knowledge,
@@ -175,14 +214,11 @@ const app = buildApp({
   metrics
 });
 
-queueWorker.on('failed', (job, error) => {
-  logger.error(
-    { eventKey: job?.data.eventKey, error: error.message },
-    'Webhook worker job failed'
-  );
+queueWorker.on('failed', () => {
+  logger.error({ code: 'webhook_job_failed' }, 'Webhook worker job failed');
 });
-queueWorker.on('error', (error) => {
-  logger.error({ error: error.message }, 'Webhook worker error');
+queueWorker.on('error', () => {
+  logger.error({ code: 'webhook_worker_error' }, 'Webhook worker error');
 });
 
 async function shutdown(signal: string): Promise<void> {
@@ -191,6 +227,9 @@ async function shutdown(signal: string): Promise<void> {
   await queueWorker.close();
   await queue.close();
   await agentRunRepository.close();
+  await outboundRepository.close();
+  await contextRepository.close();
+  await summaryRepository.close();
   await handoverRepository.close();
   await cartRepository.close();
   await checkoutDraftRepository.close();
@@ -210,8 +249,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 try {
   await app.listen({ host: config.HOST, port: config.PORT });
   logger.info({ host: config.HOST, port: config.PORT }, 'API listening');
-} catch (error) {
-  logger.fatal({ error }, 'API failed to start');
+} catch {
+  logger.fatal({ code: 'api_startup_failed' }, 'API failed to start');
   await shutdown('startup_failure');
   process.exit(1);
 }

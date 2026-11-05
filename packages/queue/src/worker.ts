@@ -28,7 +28,16 @@ export function startBullMqEventWorker(
           error instanceof Error ? error : new Error('Unknown worker failure');
         const maxAttempts = job.opts.attempts ?? 1;
         if (job.attemptsMade + 1 >= maxAttempts) {
-          await handler.onFinalFailure?.(job.data.eventKey, normalizedError);
+          try {
+            await handler.onFinalFailure?.(job.data.eventKey, normalizedError);
+          } catch (finalizationError) {
+            worker.emit(
+              'error',
+              finalizationError instanceof Error
+                ? finalizationError
+                : new Error('Terminal finalization failed')
+            );
+          }
         }
         throw error;
       }
@@ -40,25 +49,6 @@ export function startBullMqEventWorker(
     },
     { connection, concurrency: 10 }
   );
-
-  worker.on('failed', (job, error) => {
-    if (!job || !handler.onFinalFailure) return;
-    void job
-      .getState()
-      .then(async (state) => {
-        if (state === 'failed') {
-          await handler.onFinalFailure?.(job.data.eventKey, error);
-        }
-      })
-      .catch((finalizationError: unknown) => {
-        worker.emit(
-          'error',
-          finalizationError instanceof Error
-            ? finalizationError
-            : new Error('Failed to finalize terminal event state')
-        );
-      });
-  });
 
   worker.on('closed', () => connection.disconnect());
   return worker;

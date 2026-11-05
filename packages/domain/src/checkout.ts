@@ -1,7 +1,37 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
+export type CheckoutConfirmationErrorCode =
+  | 'confirmation_stale'
+  | 'confirmation_expired'
+  | 'confirmation_consumed'
+  | 'inventory_unavailable';
+export class CheckoutConfirmationError extends Error {
+  constructor(readonly code: CheckoutConfirmationErrorCode) {
+    super(code);
+    this.name = 'CheckoutConfirmationError';
+  }
+}
+
 const money = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const CheckoutConfirmationLineSchema = z
+  .object({
+    productId: z.uuid(),
+    variantId: z.uuid(),
+    sku: z.string().min(1),
+    productName: z.string().min(1),
+    variantName: z.string().min(1),
+    quantity: z.number().int().min(1).max(99),
+    unitPrice: money,
+    lineTotal: money
+  })
+  .strict()
+  .refine(
+    (line) =>
+      Number.isSafeInteger(line.unitPrice * line.quantity) &&
+      line.lineTotal === line.unitPrice * line.quantity,
+    { message: 'Invalid confirmation line total' }
+  );
 export const CheckoutSnapshotSchema = z
   .object({
     cartId: z.uuid(),
@@ -20,7 +50,12 @@ export const CheckoutSnapshotSchema = z
     subtotal: money,
     shippingFee: money,
     discountTotal: money,
-    total: money
+    total: money,
+    conversationId: z.uuid().optional(),
+    nonce: z.string().min(1).optional(),
+    preparedAt: z.number().int().nonnegative().optional(),
+    expiresAt: z.number().int().positive().optional(),
+    lines: z.array(CheckoutConfirmationLineSchema).min(1).optional()
   })
   .strict()
   .refine(
@@ -29,6 +64,44 @@ export const CheckoutSnapshotSchema = z
     { message: 'Checkout total does not match snapshot' }
   );
 export type CheckoutSnapshot = z.infer<typeof CheckoutSnapshotSchema>;
+export const PreparedCheckoutSnapshotSchema = CheckoutSnapshotSchema.safeExtend(
+  {
+    conversationId: z.uuid(),
+    nonce: z.string().min(1),
+    preparedAt: z.number().int().nonnegative(),
+    expiresAt: z.number().int().positive(),
+    lines: z.array(CheckoutConfirmationLineSchema).min(1)
+  }
+)
+  .refine(
+    (value) =>
+      value.expiresAt > value.preparedAt &&
+      value.expiresAt - value.preparedAt <= 900_000,
+    { message: 'Invalid confirmation lifetime' }
+  )
+  .refine(
+    (value) =>
+      value.lines.reduce((sum, line) => sum + line.lineTotal, 0) ===
+      value.subtotal,
+    { message: 'Confirmation lines do not match subtotal' }
+  );
+export type PreparedCheckoutSnapshot = z.infer<
+  typeof PreparedCheckoutSnapshotSchema
+>;
+export interface PreparedCheckoutConfirmation {
+  confirmationId: string;
+  snapshot: PreparedCheckoutSnapshot;
+}
+export function createPreparedCheckoutConfirmation(
+  secret: string,
+  value: unknown
+): PreparedCheckoutConfirmation {
+  const snapshot = PreparedCheckoutSnapshotSchema.parse(value);
+  return {
+    confirmationId: createCheckoutConfirmation(secret, snapshot).confirmationId,
+    snapshot
+  };
+}
 function serialize(snapshot: CheckoutSnapshot): string {
   return JSON.stringify(snapshot);
 }

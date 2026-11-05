@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "production": "./dist/index.js",
+      "default": "./src/index.ts"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -13,5 +16,8 @@
   "dependencies": {
     "js-tiktoken": "1.0.21",
     "zod": "^4.1.13"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

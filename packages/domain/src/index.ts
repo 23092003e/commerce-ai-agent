@@ -1,6 +1,7 @@
 export {
   createCartAgentTools,
   createCheckoutAgentTools,
+  createScopedCartAgentTools,
   createReadOnlyAgentTools
 } from './agent-tools.js';
 export {
@@ -11,9 +12,16 @@ export {
 } from './cart.js';
 export {
   CheckoutSnapshotSchema,
+  CheckoutConfirmationError,
+  type CheckoutConfirmationErrorCode,
+  createPreparedCheckoutConfirmation,
+  PreparedCheckoutSnapshotSchema,
+  CheckoutConfirmationLineSchema,
   createCheckoutConfirmation,
   verifyCheckoutConfirmation,
-  type CheckoutSnapshot
+  type CheckoutSnapshot,
+  type PreparedCheckoutSnapshot,
+  type PreparedCheckoutConfirmation
 } from './checkout.js';
 export {
   CheckoutDraftSchema,
@@ -24,6 +32,8 @@ export {
 } from './checkout-flow.js';
 export {
   createCheckoutOrderConfirmationService,
+  renderPreparedCheckoutConfirmation,
+  type CheckoutConfirmationRepository,
   type ActiveCheckoutCart,
   type ActiveCheckoutCartRepository,
   type CheckoutOrderConfirmationService
@@ -46,6 +56,7 @@ export {
   type GoldenScenarioCategory
 } from './golden-scenarios.js';
 export { createOpenAiDecisionProvider } from './openai-decision-provider.js';
+export { createOpenAiEmbeddingProvider } from './embedding-provider.js';
 export {
   createSalesSystemPrompt,
   SALES_SYSTEM_PROMPT_VERSION
@@ -96,3 +107,36 @@ export {
   type SaveProductReferencesRepositoryInput,
   type SaveProductReferencesResult
 } from './product-references.js';
+export { DomainError, domainErrorHttpStatus } from './errors.js';
+export type { DomainErrorCode } from './errors.js';
+export { createConversationControlService } from './conversation-control.js';
+export type {
+  AdminControlInput,
+  ConversationControlResult,
+  ConversationControlService,
+  ControlConversationView
+} from './conversation-control.js';
+export {
+  boundRecentMessages,
+  redactConversationText
+} from './agent-context.js';
+export type {
+  ConversationContextRepository,
+  RecentAgentMessage
+} from './agent-context.js';
+export {
+  AgentReplyDecisionSchema,
+  validateAndRenderGroundedReply,
+  SAFE_REPLY_INTROS,
+  SAFE_REPLY_QUESTIONS
+} from './grounded-reply.js';
+export type { AgentReplyDecision } from './grounded-reply.js';
+export {
+  projectToolEvidence,
+  validateAgentToolInput
+} from './tool-evidence.js';
+export {
+  ConversationSummarySchema,
+  createSafeConversationSummary,
+  shouldRefreshSummary
+} from './conversation-summary.js';

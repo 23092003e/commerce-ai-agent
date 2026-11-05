@@ -26,6 +26,46 @@ beforeAll(async () => {
 afterAll(async () => repository.close());
 
 describe('Postgres knowledge RAG', () => {
+  it('versions identical content across embedding models and filters incompatible keyword evidence', async () => {
+    const marker = randomUUID();
+    const input = {
+      title: `Provenance ${marker}`,
+      sourceKey: `provenance-${marker}`,
+      sourceType: 'faq' as const,
+      content: `provenanceunique${marker.replaceAll('-', '')} policy`,
+      topics: [`prov-${marker}`]
+    };
+    const first = await service.ingest(input);
+    const realService = createKnowledgeService(repository, {
+      dimensions: 8,
+      provider: 'openai-compatible',
+      model: 'fixture-real-model',
+      embed: (text) => createDeterministicEmbeddingProvider(8).embed(text)
+    });
+    const second = await realService.ingest(input);
+    expect(second.type).toBe('created');
+    expect(second.documentId).not.toBe(first.documentId);
+    expect(await realService.ingest(input)).toEqual({
+      type: 'duplicate',
+      documentId: second.documentId
+    });
+    expect(
+      await service.search({ query: input.content, topics: input.topics })
+    ).toEqual({ type: 'insufficient_evidence', chunks: [] });
+    expect(
+      await realService.search({ query: input.content, topics: input.topics })
+    ).toMatchObject({ type: 'evidence' });
+    expect(await service.ingest(input)).toEqual({
+      type: 'duplicate',
+      documentId: first.documentId
+    });
+    expect(
+      await service.search({ query: input.content, topics: input.topics })
+    ).toMatchObject({ type: 'evidence' });
+    expect(
+      await realService.search({ query: input.content, topics: input.topics })
+    ).toEqual({ type: 'insufficient_evidence', chunks: [] });
+  });
   it('retrieves known shipping and returns FAQ evidence and keeps unknown policy grounded', async () => {
     const knownCases = [
       {
@@ -54,7 +94,10 @@ describe('Postgres knowledge RAG', () => {
       expect(firstChunk.chunkId).toMatch(/^[0-9a-f-]{36}$/u);
     }
     await expect(
-      service.search({ query: 'astronaut insurance policy' })
+      service.search({
+        query: 'astronaut insurance policy',
+        topics: ['astronaut']
+      })
     ).resolves.toEqual({ type: 'insufficient_evidence', chunks: [] });
   });
 

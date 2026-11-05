@@ -29,7 +29,7 @@ describe('Meta Graph messaging contract', () => {
     [400, 'invalid_request', false],
     [401, 'authentication', false],
     [429, 'rate_limited', true],
-    [500, 'server_error', true]
+    [500, 'server_error', false]
   ] as const)(
     'classifies HTTP %s as %s with retryable=%s',
     async (status, code, retryable) => {
@@ -46,7 +46,7 @@ describe('Meta Graph messaging contract', () => {
     }
   );
 
-  it('classifies a transport timeout as retryable', async () => {
+  it('classifies a transport timeout as ambiguous without automatic retry', async () => {
     const channel = createChannel(
       vi
         .fn<typeof fetch>()
@@ -58,6 +58,6 @@ describe('Meta Graph messaging contract', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(MetaChannelError);
-    expect(error).toMatchObject({ code: 'timeout', retryable: true });
+    expect(error).toMatchObject({ code: 'timeout', retryable: false });
   });
 });

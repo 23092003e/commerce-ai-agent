@@ -52,11 +52,21 @@ describe('Postgres agent run tracing', () => {
     });
     await repository.recordToolCall({
       agentRunId,
+      step: 1,
       toolName: 'catalog.searchProducts',
       arguments: { queryLength: 4 },
       resultSummary: { productCount: 1 },
       status: 'succeeded',
       latencyMs: 12
+    });
+    await repository.recordToolCall({
+      agentRunId,
+      step: 1,
+      toolName: 'catalog.searchProducts',
+      arguments: {},
+      resultSummary: { shouldNotOverwrite: true },
+      status: 'succeeded',
+      latencyMs: 1
     });
     await repository.complete({
       agentRunId,

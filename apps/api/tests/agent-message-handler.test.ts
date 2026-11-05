@@ -1,11 +1,15 @@
 import {
   createScriptedDecisionProvider,
+  CheckoutConfirmationError,
+  renderPreparedCheckoutConfirmation,
+  type PreparedCheckoutConfirmation,
   type CartService,
   type CatalogService,
   type CheckoutOrderConfirmationService,
   type CheckoutFlow,
   type KnowledgeService
 } from '@fanpage/domain';
+import { InMemoryOutboundMessageRepository } from '@fanpage/db';
 import { FakeMessagingChannel, MetaChannelError } from '@fanpage/meta';
 import type { OperationalMetrics } from '@fanpage/observability';
 import { describe, expect, it } from 'vitest';
@@ -27,6 +31,8 @@ function createHarness(
     replyPacer?: ReplyPacer;
     checkoutOrderConfirmation?: CheckoutOrderConfirmationService;
     metrics?: OperationalMetrics;
+    outbound?: InMemoryOutboundMessageRepository;
+    checkout?: CheckoutFlow;
   } = {}
 ) {
   const channel = new FakeMessagingChannel();
@@ -37,7 +43,7 @@ function createHarness(
     catalog: {} as CatalogService,
     knowledge: {} as KnowledgeService,
     cart: {} as CartService,
-    checkout: {} as CheckoutFlow,
+    checkout: options.checkout ?? ({} as CheckoutFlow),
     agentRuns: {
       async start() {
         return '44444444-4444-4444-8444-444444444444';
@@ -56,6 +62,7 @@ function createHarness(
     modelProvider: 'fake',
     modelName: 'fake',
     promptVersion: 'test.v1',
+    ...(options.outbound ? { outbound: options.outbound } : {}),
     ...(options.replyPacer === undefined
       ? {}
       : { replyPacer: options.replyPacer }),
@@ -75,17 +82,229 @@ const message = {
   text: 'Xin chào',
   timestamp: Date.now()
 };
+const prepared: PreparedCheckoutConfirmation = {
+  confirmationId: 'persisted-id',
+  snapshot: {
+    conversationId: conversation.id,
+    cartId: conversation.id,
+    cartVersion: 1,
+    recipientName: 'Test Customer',
+    phone: '0900000000',
+    address: { line1: 'Test Street', ward: 'Ward', city: 'City' },
+    paymentMethod: 'cod',
+    currency: 'VND',
+    subtotal: 100,
+    shippingFee: 0,
+    discountTotal: 0,
+    total: 100,
+    preparedAt: message.timestamp - 1000,
+    expiresAt: message.timestamp + 899000,
+    nonce: 'test',
+    lines: [
+      {
+        productId: conversation.id,
+        variantId: conversation.id,
+        sku: 'TEST',
+        productName: 'Test Product',
+        variantName: 'Default',
+        quantity: 1,
+        unitPrice: 100,
+        lineTotal: 100
+      }
+    ]
+  }
+};
 
 describe('AgentMessageHandler', () => {
+  it('records provider call metrics from the live handler orchestration', async () => {
+    const names: string[] = [];
+    const metrics: OperationalMetrics = {
+      increment(name) {
+        names.push(name);
+      },
+      observe(name) {
+        names.push(name);
+      }
+    };
+    const { handler } = createHarness(
+      [{ type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }],
+      { metrics }
+    );
+    await handler.handle(message);
+    expect(names).toContain('llm_calls_total');
+  });
+  it('sends the persisted exact summary after the final checkout field even when the model stops', async () => {
+    const { handler, channel, handovers } = createHarness(
+      [
+        {
+          type: 'tool',
+          name: 'checkout.setPaymentMethod',
+          input: { expectedVersion: 1, paymentMethod: 'cod' }
+        }
+      ],
+      {
+        checkout: {
+          async start() {
+            throw new Error('Unexpected checkout start');
+          },
+          async setRecipientName() {
+            throw new Error('Unexpected name');
+          },
+          async setPhone() {
+            throw new Error('Unexpected phone');
+          },
+          async setAddress() {
+            throw new Error('Unexpected address');
+          },
+          async setPaymentMethod() {
+            return {
+              conversationId: conversation.id,
+              version: 2,
+              state: 'awaiting_confirmation',
+              recipientName: prepared.snapshot.recipientName,
+              phone: prepared.snapshot.phone,
+              address: prepared.snapshot.address,
+              paymentMethod: 'cod'
+            };
+          }
+        },
+        checkoutOrderConfirmation: {
+          async linkSummary() {},
+          async getPrepared() {
+            return prepared;
+          },
+          async prepareConfirmation() {
+            return prepared;
+          },
+          async confirmPrepared() {
+            throw new Error('No consent');
+          }
+        }
+      }
+    );
+    await handler.handle(message);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      { text: renderPreparedCheckoutConfirmation(prepared) }
+    ]);
+    expect(handovers).toEqual([]);
+  });
+  it.each(['confirmation_stale', 'confirmation_expired'] as const)(
+    'shows a newly prepared exact summary after %s and requires new consent',
+    async (code) => {
+      let preparations = 0;
+      const { handler, channel, handovers } = createHarness([], {
+        checkoutOrderConfirmation: {
+          async linkSummary() {},
+          async getPrepared() {
+            return prepared;
+          },
+          async prepareConfirmation() {
+            preparations += 1;
+            return prepared;
+          },
+          async confirmPrepared() {
+            throw new CheckoutConfirmationError(code);
+          }
+        }
+      });
+      await handler.handle({ ...message, text: 'confirm' });
+      expect(preparations).toBe(1);
+      expect(channel.getCapturedMessages()).toMatchObject([
+        { text: renderPreparedCheckoutConfirmation(prepared) }
+      ]);
+      expect(handovers).toEqual([]);
+    }
+  );
+  it('asks for explicit consent when an existing summary receives ambiguous ok', async () => {
+    let confirmations = 0;
+    const { handler, channel } = createHarness([], {
+      checkoutOrderConfirmation: {
+        async linkSummary() {},
+        async getPrepared() {
+          return prepared;
+        },
+        async prepareConfirmation() {
+          throw new Error('must not regenerate');
+        },
+        async confirmPrepared() {
+          confirmations += 1;
+          return { orderId: 'forbidden', orderNumber: 'forbidden' };
+        }
+      }
+    });
+    await handler.handle({ ...message, text: 'ok' });
+    expect(confirmations).toBe(0);
+    expect(channel.getCapturedMessages()[0]?.text).toContain('confirm');
+  });
+  it('resumes persisted delivery in a fresh handler without running its provider', async () => {
+    const outbound = new InMemoryOutboundMessageRepository();
+    const first = createHarness(
+      [{ type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }],
+      { outbound }
+    );
+    first.channel.sendText = async () => {
+      throw new MetaChannelError('limited', 'rate_limited', true);
+    };
+    await expect(first.handler.handle(message)).rejects.toThrow('limited');
+    const restarted = createHarness([], { outbound });
+    const result = await restarted.handler.handle(message);
+    expect(result).toMatchObject({ outcome: 'replied' });
+    expect(restarted.channel.getCapturedMessages()).toMatchObject([
+      { text: 'Dạ em chào anh/chị.' }
+    ]);
+    expect(restarted.handovers).toEqual([]);
+  });
+  it('opens handover for provider failure before planning and returns a terminal outcome', async () => {
+    const { handler, handovers, channel } = createHarness([]);
+    expect(await handler.handle(message)).toEqual({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['script_exhausted']);
+    expect(channel.getCapturedMessages()).toEqual([]);
+  });
+  it('retries a definitive rejection using persisted text without rerunning the provider', async () => {
+    const { handler, channel, completions } = createHarness([
+      { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
+    ]);
+    const send = channel.sendText.bind(channel);
+    let attempts = 0;
+    channel.sendText = async (input) => {
+      attempts += 1;
+      if (attempts === 1)
+        throw new MetaChannelError('limited', 'rate_limited', true);
+      return send(input);
+    };
+    await expect(handler.handle(message)).rejects.toThrow('limited');
+    await handler.handle(message);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      { text: 'Dạ em chào anh/chị.' }
+    ]);
+    expect(completions.at(-1)).toBe('replied');
+    await handler.handle(message);
+    expect(attempts).toBe(2);
+  });
+
+  it('does not resend an ambiguous transport outcome and durably hands over', async () => {
+    const { handler, channel, handovers } = createHarness([
+      { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
+    ]);
+    let attempts = 0;
+    channel.sendText = async () => {
+      attempts += 1;
+      throw new MetaChannelError('network', 'network', true);
+    };
+    await handler.handle(message);
+    await handler.handle(message);
+    expect(attempts).toBe(1);
+    expect(handovers).toContain('meta_delivery_network');
+  });
   it('sends an agent reply through the channel and records the outcome', async () => {
     const { handler, channel, completions, handovers } = createHarness([
-      { type: 'reply', text: 'Chào bạn!', evidenceChunkIds: [] }
+      { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
     ]);
 
     await handler.handle(message);
 
     expect(channel.getCapturedMessages()).toMatchObject([
-      { recipientId: 'customer-123', text: 'Chào bạn!' }
+      { recipientId: 'customer-123', text: 'Dạ em chào anh/chị.' }
     ]);
     expect(completions).toEqual(['replied']);
     expect(handovers).toEqual([]);
@@ -94,7 +313,7 @@ describe('AgentMessageHandler', () => {
   it('paces a reply before sending it to the customer', async () => {
     const pacedTexts: string[] = [];
     const { handler, channel } = createHarness(
-      [{ type: 'reply', text: 'Chào bạn!', evidenceChunkIds: [] }],
+      [{ type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }],
       {
         replyPacer: {
           async wait(text) {
@@ -106,14 +325,14 @@ describe('AgentMessageHandler', () => {
 
     await handler.handle(message);
 
-    expect(pacedTexts).toEqual(['Chào bạn!']);
+    expect(pacedTexts).toEqual(['Dạ em chào anh/chị.']);
     expect(channel.getCapturedMessages()).toHaveLength(1);
   });
 
   it('emits a redacted agent latency metric after a customer reply', async () => {
     const metrics: Array<{ name: string; labels: Record<string, string> }> = [];
     const { handler } = createHarness(
-      [{ type: 'reply', text: 'Chao ban!', evidenceChunkIds: [] }],
+      [{ type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }],
       {
         metrics: {
           increment() {},
@@ -158,7 +377,7 @@ describe('AgentMessageHandler', () => {
 
   it('does not send when conversation control belongs to a human', async () => {
     const { handler, channel, completions, handovers } = createHarness([
-      { type: 'reply', text: 'must not send', evidenceChunkIds: [] }
+      { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
     ]);
 
     await handler.handle({
@@ -188,7 +407,7 @@ describe('AgentMessageHandler', () => {
 
   it('does not send an automated reply outside the 24-hour messaging window', async () => {
     const { handler, channel, completions, handovers } = createHarness([
-      { type: 'reply', text: 'must not send', evidenceChunkIds: [] }
+      { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
     ]);
 
     await handler.handle({
@@ -205,11 +424,20 @@ describe('AgentMessageHandler', () => {
     const confirmed: string[] = [];
     const { handler, channel } = createHarness([], {
       checkoutOrderConfirmation: {
-        async isReady() {
-          return true;
+        async linkSummary() {},
+        async getPrepared() {
+          return {
+            confirmationId: 'prepared-before-consent',
+            snapshot: {} as never
+          };
         },
-        async confirm(conversationId) {
-          confirmed.push(conversationId);
+        async prepareConfirmation() {
+          throw new Error('Must not prepare after consent');
+        },
+        async confirmPrepared(input) {
+          expect(input.confirmationId).toBe('prepared-before-consent');
+          expect(input.confirmationMessageTimestamp).toBe(message.timestamp);
+          confirmed.push(input.conversationId);
           return { orderId: 'order-1', orderNumber: 'ORD-TEST' };
         }
       }
@@ -226,7 +454,7 @@ describe('AgentMessageHandler', () => {
     const failureErrors: string[] = [];
     const handler = new AgentMessageHandler({
       provider: createScriptedDecisionProvider([
-        { type: 'reply', text: 'will fail', evidenceChunkIds: [] }
+        { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
       ]),
       catalog: {} as CatalogService,
       knowledge: {} as KnowledgeService,
@@ -260,13 +488,13 @@ describe('AgentMessageHandler', () => {
     await handler.handle(message);
 
     expect(errors).toEqual(['Agent message handling failed']);
-    expect(failureErrors).toEqual(['transport unavailable']);
+    expect(failureErrors).toEqual(['agent_failed', '']);
   });
 
   it('rethrows a retryable Meta send failure for the durable queue', async () => {
     const handler = new AgentMessageHandler({
       provider: createScriptedDecisionProvider([
-        { type: 'reply', text: 'retry me', evidenceChunkIds: [] }
+        { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
       ]),
       catalog: {} as CatalogService,
       knowledge: {} as KnowledgeService,
@@ -282,12 +510,7 @@ describe('AgentMessageHandler', () => {
       handovers: { async request() {} },
       channel: {
         async sendText() {
-          throw new MetaChannelError(
-            'temporary outage',
-            'server_error',
-            true,
-            503
-          );
+          throw new MetaChannelError('limited', 'rate_limited', true, 429);
         }
       },
       modelProvider: 'fake',
@@ -296,7 +519,7 @@ describe('AgentMessageHandler', () => {
     });
 
     await expect(handler.handle(message)).rejects.toMatchObject({
-      code: 'server_error',
+      code: 'rate_limited',
       retryable: true
     });
   });
@@ -306,7 +529,7 @@ describe('AgentMessageHandler', () => {
     const metrics: Array<{ name: string; labels: Record<string, string> }> = [];
     const handler = new AgentMessageHandler({
       provider: createScriptedDecisionProvider([
-        { type: 'reply', text: 'cannot deliver', evidenceChunkIds: [] }
+        { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
       ]),
       catalog: {} as CatalogService,
       knowledge: {} as KnowledgeService,

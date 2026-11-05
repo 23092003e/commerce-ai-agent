@@ -72,6 +72,19 @@ async function processNext(
 }
 
 describe('Meta webhook ingestion pipeline', () => {
+  it('does not automatically replay an exhausted event when Meta redelivers it', async () => {
+    const { app, queue, repository, worker } = createHarness();
+    await postFixture(app, firstFixture);
+    const key = queue.take();
+    if (!key) throw new Error('Expected event');
+    await repository.markWebhookEventFailed(key);
+    expect((await postFixture(app, firstFixture)).statusCode).toBe(200);
+    expect(queue.take()).toBeUndefined();
+    await worker.process(key);
+    expect((await repository.getWebhookEvent(key))?.processingState).toBe(
+      'failed'
+    );
+  });
   it('rejects a signed but invalid external payload safely', async () => {
     const { app, repository } = createHarness();
     const payload = JSON.stringify({ object: 'not-a-page', entry: [] });
