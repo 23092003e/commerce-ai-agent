@@ -21,7 +21,7 @@ const errors = validateReleaseEvidence(
   JSON.parse(readFileSync(evidencePath, 'utf8')),
   {
     sha: git('rev-parse', 'HEAD'),
-    dirty: git('status', '--porcelain', '--untracked-files=no').length > 0,
+    dirty: git('status', '--porcelain', '--untracked-files=normal').length > 0,
     now: Date.now(),
     migrations
   }

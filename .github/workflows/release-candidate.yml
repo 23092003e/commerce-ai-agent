@@ -45,7 +45,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test -- --reporter=default --reporter=junit --outputFile=unit-results.xml
+      - run: pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit=unit-results.xml
       - run: pnpm db:migrate
       - run: pnpm test:integration
       - run: pnpm build
