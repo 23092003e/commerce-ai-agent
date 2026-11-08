@@ -163,6 +163,20 @@ export class PostgresCommerceRepository implements CommerceRepository {
     return event ? mapEvent(event) : null;
   }
 
+  async listRecoverableWebhookEventKeys(limit: number): Promise<string[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
+      throw new Error('Invalid recovery batch size');
+    const events = await this.db
+      .select({ key: schema.webhookEvents.externalEventKey })
+      .from(schema.webhookEvents)
+      .where(
+        sql`${schema.webhookEvents.processingState} IN ('received', 'queued', 'processing')`
+      )
+      .orderBy(schema.webhookEvents.receivedAt, schema.webhookEvents.id)
+      .limit(limit);
+    return events.map((event) => event.key);
+  }
+
   async claimWebhookEventForProcessing(
     eventKey: string
   ): Promise<WebhookEventClaimResult> {

@@ -111,7 +111,7 @@ Pacing uses an asynchronous timer, never a busy wait. Set `HUMAN_REPLY_DELAY_ENA
 
 ## Cloudflare Tunnel
 
-For a continuously running Linux server, use the [VPS deployment runbook](docs/runbooks/vps-deploy.md) and the production Compose + Caddy profile. The proposed domain is `demo.boywithlycoris.online`; no public URL is claimed live until verified. A VPS has not yet been provisioned.
+For the free portfolio deployment, see the [Render and Neon runbook](docs/runbooks/render-neon.md). For a continuously running Linux server, use the [VPS deployment runbook](docs/runbooks/vps-deploy.md) and the production Compose + Caddy profile. No public URL is claimed live until verified.
 
 1. Create a managed tunnel in Cloudflare Zero Trust.
 2. Create a public hostname, such as `api.example.com`.

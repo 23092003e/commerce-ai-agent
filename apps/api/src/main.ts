@@ -41,6 +41,7 @@ import { AgentMessageHandler } from './workers/agent-message-handler.js';
 import { InboundMessageWorker } from './workers/inbound-message-worker.js';
 import { createHumanReplyPacer } from './workers/reply-pacer.js';
 import { createFakeDecisionProvider } from './services/fake-decision.js';
+import { startQueueRecovery } from './services/queue-recovery.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -158,6 +159,12 @@ const inboundWorker = new InboundMessageWorker(
   metrics
 );
 const queueWorker = startBullMqEventWorker(config.REDIS_URL, inboundWorker);
+const stopQueueRecovery = startQueueRecovery({
+  listPending: () => repository.listRecoverableWebhookEventKeys(100),
+  enqueue: (key) => queue.enqueue(key),
+  onError: () =>
+    logger.error({ code: 'queue_recovery_failed' }, 'Queue recovery failed')
+});
 const app = buildApp({
   ...(config.METRICS_AUTH_SECRET
     ? { metricsAuthSecret: config.METRICS_AUTH_SECRET }
@@ -224,6 +231,7 @@ queueWorker.on('error', () => {
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutting down');
   await app.close();
+  await stopQueueRecovery();
   await queueWorker.close();
   await queue.close();
   await agentRunRepository.close();

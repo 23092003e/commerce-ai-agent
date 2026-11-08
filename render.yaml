@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: fanpage-sales-agent
+    runtime: docker
+    plan: free
+    dockerCommand: /bin/sh -c 'node packages/db/dist/migrate-cli.js && exec node apps/api/dist/main.js'
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: fanpage-sales-agent-queue
+          property: connectionString
+      - key: APP_BASE_URL
+        sync: false
+      - key: META_ADAPTER
+        value: graph
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_VERIFY_TOKEN
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: AI_PROVIDER
+        value: openrouter
+      - key: AI_MODEL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: openai-compatible
+      - key: EMBEDDING_MODEL
+        sync: false
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: EMBEDDING_BASE_URL
+        sync: false
+      - key: EMBEDDING_DIMENSIONS
+        value: '1536'
+      - key: ADMIN_AUTH_SECRET
+        generateValue: true
+      - key: METRICS_AUTH_SECRET
+        generateValue: true
+  - type: keyvalue
+    name: fanpage-sales-agent-queue
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction

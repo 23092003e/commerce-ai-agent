@@ -1,6 +1,6 @@
 # Linux VPS deployment
 
-Target: a continuously running Linux VPS. Proposed hostname: `demo.boywithlycoris.online`; confirm it before DNS changes. The VPS identity and access must be supplied before any server operation.
+Target: a continuously running Linux VPS. Confirm a professional project hostname before DNS changes. The VPS identity and access must be supplied before any server operation.
 
 ## Host requirements
 
