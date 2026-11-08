@@ -125,6 +125,62 @@ export function createAgentOrchestrator(input: {
           trace: { toolCalls }
         };
       }
+      const generalCatalogQuestion =
+        /^(?:xin chào[,!. ]*)?(?:cửa hàng|shop|tiệm)(?: đang)? (?:bán|có) (?:(?:những|các|loại) )*(?:sản phẩm|bánh|gì)(?: nào| gì)?[?.! ]*$/iu.test(
+          context.customerMessage.trim().normalize('NFC')
+        );
+      const catalogSearch = tools.get('catalog.searchProducts');
+      if (generalCatalogQuestion && catalogSearch) {
+        const args = { inStockOnly: true, limit: 3 };
+        try {
+          const startedAt = performance.now();
+          const result = await catalogSearch.execute(args);
+          const trace = projectToolEvidence(
+            catalogSearch.name,
+            args,
+            result,
+            1
+          );
+          trace.latencyMs = Math.round(performance.now() - startedAt);
+          toolCalls.push(trace);
+          const facts: AgentReplyDecision['facts'] = (trace.evidence ?? [])
+            .filter((item) => item.type === 'catalog_product')
+            .slice(0, 3)
+            .map((item) => ({
+              type: 'catalog_product',
+              productId: item.value.productId
+            }));
+          if (facts.length) {
+            const rendered = validateAndRenderGroundedReply({
+              decision: {
+                type: 'reply',
+                intro: 'Dạ em gửi anh/chị thông tin đã kiểm tra.',
+                facts
+              },
+              ledger: toolCalls,
+              locale: 'vi-VN'
+            });
+            input.metrics?.increment('tool_calls_total', {
+              toolName: catalogSearch.name,
+              status: 'success'
+            });
+            return {
+              type: 'reply',
+              ...rendered,
+              factRefs: facts,
+              toolSteps: 1,
+              trace: { toolCalls }
+            };
+          }
+        } catch {
+          return {
+            type: 'handover',
+            reason: 'catalog_unavailable',
+            toolSteps: 1,
+            trace: { toolCalls }
+          };
+        }
+      }
       const referencePosition = /(?:mẫu|mau|option|item)\s*(\d{1,2})\b/iu.exec(
         context.customerMessage
       )?.[1];

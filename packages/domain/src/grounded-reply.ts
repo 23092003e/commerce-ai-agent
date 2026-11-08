@@ -49,7 +49,7 @@ export const SAFE_REPLY_QUESTIONS = [
   'Anh/chị cần bánh cho khoảng bao nhiêu người ạ?',
   'Anh/chị quan tâm mẫu nào ạ?',
   'Anh/chị muốn em hỗ trợ thêm điều gì ạ?',
-  'Anh/chị thích màu hoặc kích thước nào ạ?',
+  'Anh/chị thích vị bánh hoặc kích thước nào ạ?',
   'Anh/chị muốn chọn mẫu này không ạ?',
   'Anh/chị cho em xin tên người nhận ạ?',
   'Anh/chị cho em xin số điện thoại nhận hàng ạ?',

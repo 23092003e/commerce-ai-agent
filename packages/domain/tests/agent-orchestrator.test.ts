@@ -10,6 +10,63 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('answers a general catalog question with verified products instead of an unrelated question', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([
+        {
+          type: 'reply',
+          facts: [],
+          nextQuestion: 'Anh/chị đang tìm bánh cho dịp nào ạ?'
+        }
+      ]),
+      tools: [
+        {
+          name: 'catalog.searchProducts',
+          async execute() {
+            return {
+              products: [
+                {
+                  productId,
+                  name: 'Bánh chocolate',
+                  priceFrom: 120000,
+                  currency: 'VND'
+                }
+              ]
+            };
+          }
+        }
+      ]
+    });
+    const result = await agent.run({
+      customerMessage: 'Cửa hàng đang bán sản phẩm nào?'
+    });
+    expect(result).toMatchObject({
+      type: 'reply',
+      factRefs: [{ type: 'catalog_product', productId }]
+    });
+    if (result.type === 'reply')
+      expect(result.text).toContain('Bánh chocolate');
+  });
+  it('does not fabricate a catalog reply when the catalog lookup fails', async () => {
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([]),
+      tools: [
+        {
+          name: 'catalog.searchProducts',
+          async execute() {
+            throw new Error('offline');
+          }
+        }
+      ]
+    });
+    await expect(
+      agent.run({ customerMessage: 'Xin chào, cửa hàng có sản phẩm gì?' })
+    ).resolves.toMatchObject({
+      type: 'handover',
+      reason: 'catalog_unavailable'
+    });
+  });
   it('resolves a second-turn position through the exact stored ID and refuses mismatched variants', async () => {
     const first = '11111111-1111-4111-8111-111111111111';
     const second = '22222222-2222-4222-8222-222222222222';
