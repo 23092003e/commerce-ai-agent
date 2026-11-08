@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   createCatalogService,
-  createProductReferenceService
+  createProductReferenceService,
+  createAgentOrchestrator,
+  createScriptedDecisionProvider
 } from '@fanpage/domain';
 import {
   PostgresCommerceRepository,
@@ -38,6 +40,38 @@ afterAll(async () => {
 });
 
 describe('Postgres catalog', () => {
+  it('answers a named product price and inventory question from Postgres', async () => {
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([]),
+      tools: [
+        {
+          name: 'catalog.searchProducts',
+          execute: (input) => service.searchProducts(input)
+        },
+        {
+          name: 'catalog.getProduct',
+          execute: (input) => service.getProduct(input)
+        },
+        {
+          name: 'catalog.checkInventory',
+          execute: (input) => service.checkInventory(input)
+        }
+      ]
+    });
+    const result = await agent.run({
+      customerMessage: 'Essential Polo giá bao nhiêu, còn hàng không?'
+    });
+    expect(result.type).toBe('reply');
+    if (result.type === 'reply') {
+      expect(result.text).toContain('Essential Polo');
+      expect(result.factRefs.some((fact) => fact.type === 'inventory')).toBe(
+        true
+      );
+      expect(result.trace.toolCalls.map((call) => call.name)).toContain(
+        'catalog.checkInventory'
+      );
+    }
+  });
   it('returns only DB-backed products matching translated filters', async () => {
     const naturalLanguageCase = {
       message: 'Tìm áo polo màu đen size L dưới 500k',

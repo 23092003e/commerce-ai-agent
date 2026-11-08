@@ -181,6 +181,111 @@ export function createAgentOrchestrator(input: {
           };
         }
       }
+      const priceAndStock =
+        /^(.{2,100}?)\s+giá bao nhiêu\s*[,;]?\s*còn hàng không[?.! ]*$/iu.exec(
+          context.customerMessage.trim().normalize('NFC')
+        );
+      const productLookup = tools.get('catalog.getProduct');
+      const inventoryLookup = tools.get('catalog.checkInventory');
+      if (
+        priceAndStock?.[1] &&
+        catalogSearch &&
+        productLookup &&
+        inventoryLookup &&
+        maxToolSteps >= 4
+      ) {
+        const productName = priceAndStock[1].trim();
+        try {
+          const runLookup = async (tool: AgentTool, args: unknown) => {
+            const startedAt = performance.now();
+            const result = await tool.execute(
+              validateAgentToolInput(tool.name, args)
+            );
+            const trace = projectToolEvidence(
+              tool.name,
+              args,
+              result,
+              toolCalls.length + 1
+            );
+            trace.latencyMs = Math.round(performance.now() - startedAt);
+            toolCalls.push(trace);
+            toolResults.push(safeToolProviderResult(trace));
+            input.metrics?.increment('tool_calls_total', {
+              toolName: tool.name,
+              status: 'success'
+            });
+            return trace;
+          };
+          const search = await runLookup(catalogSearch, {
+            query: productName,
+            inStockOnly: false,
+            limit: 5
+          });
+          const matches = (search.evidence ?? []).filter(
+            (item) =>
+              item.type === 'catalog_product' &&
+              item.value.name.toLocaleLowerCase('vi-VN') ===
+                productName.toLocaleLowerCase('vi-VN')
+          );
+          if (matches.length === 1 && matches[0]?.type === 'catalog_product') {
+            const productId = matches[0].value.productId;
+            const detail = await runLookup(productLookup, { productId });
+            const variants = (detail.evidence ?? [])
+              .filter(
+                (item) =>
+                  item.type === 'catalog_variant' &&
+                  item.value.productId === productId
+              )
+              .slice(0, 2);
+            const facts: AgentReplyDecision['facts'] = [
+              { type: 'catalog_product', productId }
+            ];
+            for (const variant of variants) {
+              if (variant.type !== 'catalog_variant') continue;
+              const inventory = await runLookup(inventoryLookup, {
+                variantId: variant.value.variantId
+              });
+              if (
+                !inventory.evidence?.some(
+                  (item) =>
+                    item.type === 'inventory' &&
+                    item.value.variantId === variant.value.variantId
+                )
+              )
+                throw new Error('inventory evidence missing');
+              facts.push(
+                { type: 'catalog_variant', variantId: variant.value.variantId },
+                { type: 'inventory', variantId: variant.value.variantId }
+              );
+            }
+            if (variants.length) {
+              const rendered = validateAndRenderGroundedReply({
+                decision: {
+                  type: 'reply',
+                  intro: 'Dạ em gửi anh/chị thông tin đã kiểm tra.',
+                  facts
+                },
+                ledger: toolCalls,
+                locale: 'vi-VN'
+              });
+              return {
+                type: 'reply',
+                ...rendered,
+                factRefs: facts,
+                toolSteps: toolCalls.length,
+                trace: { toolCalls }
+              };
+            }
+          }
+        } catch {
+          return {
+            type: 'handover',
+            reason: 'catalog_unavailable',
+            toolSteps: toolCalls.length,
+            trace: { toolCalls }
+          };
+        }
+      }
       const referencePosition = /(?:mẫu|mau|option|item)\s*(\d{1,2})\b/iu.exec(
         context.customerMessage
       )?.[1];

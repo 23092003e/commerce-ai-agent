@@ -10,6 +10,130 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('answers a named product price and stock question using matching verified variants', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    const variantId = '22222222-2222-4222-8222-222222222222';
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([]),
+      tools: [
+        {
+          name: 'catalog.searchProducts',
+          async execute() {
+            return {
+              products: [
+                {
+                  productId,
+                  name: 'Butter Croissant',
+                  priceFrom: 42000,
+                  currency: 'VND'
+                }
+              ]
+            };
+          }
+        },
+        {
+          name: 'catalog.getProduct',
+          async execute() {
+            return {
+              productId,
+              name: 'Butter Croissant',
+              priceFrom: 42000,
+              currency: 'VND',
+              variants: [
+                {
+                  variantId,
+                  productId,
+                  sku: 'BM-CROI-ONE',
+                  title: '1 chiếc',
+                  price: 42000,
+                  currency: 'VND',
+                  availableQuantity: 24
+                }
+              ]
+            };
+          }
+        },
+        {
+          name: 'catalog.checkInventory',
+          async execute() {
+            return { variantId, availableQuantity: 24 };
+          }
+        }
+      ]
+    });
+    const result = await agent.run({
+      customerMessage: 'Butter Croissant giá bao nhiêu, còn hàng không?'
+    });
+    expect(result.type).toBe('reply');
+    if (result.type === 'reply') {
+      expect(result.text).toContain('24');
+      expect(result.factRefs).toContainEqual({ type: 'inventory', variantId });
+      expect(result.factRefs).toContainEqual({
+        type: 'catalog_variant',
+        variantId
+      });
+    }
+  });
+  it('does not report stock if the inventory lookup fails', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    const variantId = '22222222-2222-4222-8222-222222222222';
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([]),
+      tools: [
+        {
+          name: 'catalog.searchProducts',
+          async execute() {
+            return {
+              products: [
+                {
+                  productId,
+                  name: 'Butter Croissant',
+                  priceFrom: 42000,
+                  currency: 'VND'
+                }
+              ]
+            };
+          }
+        },
+        {
+          name: 'catalog.getProduct',
+          async execute() {
+            return {
+              productId,
+              name: 'Butter Croissant',
+              priceFrom: 42000,
+              currency: 'VND',
+              variants: [
+                {
+                  variantId,
+                  productId,
+                  sku: 'BM-CROI-ONE',
+                  title: '1 chiếc',
+                  price: 42000,
+                  currency: 'VND',
+                  availableQuantity: 24
+                }
+              ]
+            };
+          }
+        },
+        {
+          name: 'catalog.checkInventory',
+          async execute() {
+            throw new Error('unavailable');
+          }
+        }
+      ]
+    });
+    await expect(
+      agent.run({
+        customerMessage: 'Butter Croissant giá bao nhiêu, còn hàng không?'
+      })
+    ).resolves.toMatchObject({
+      type: 'handover',
+      reason: 'catalog_unavailable'
+    });
+  });
   it('answers a general catalog question with verified products instead of an unrelated question', async () => {
     const productId = '11111111-1111-4111-8111-111111111111';
     const agent = createAgentOrchestrator({
