@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "production": "./dist/index.js",
+      "default": "./src/index.ts"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -13,5 +16,8 @@
   "dependencies": {
     "bullmq": "^5.65.1",
     "ioredis": "^5.8.2"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

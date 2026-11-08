@@ -1,11 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import {
-  createCheckoutConfirmation,
-  type CheckoutSnapshot
+  PreparedCheckoutSnapshotSchema,
+  CheckoutConfirmationError,
+  verifyCheckoutConfirmation,
+  type PreparedCheckoutConfirmation
 } from './checkout.js';
-import type {
-  CheckoutDraft,
-  CheckoutDraftRepository
-} from './checkout-flow.js';
 import type { OrderService } from './order.js';
 
 export interface ActiveCheckoutCart {
@@ -15,75 +15,126 @@ export interface ActiveCheckoutCart {
   subtotal: number;
   total: number;
 }
-
 export interface ActiveCheckoutCartRepository {
   getActiveForConversation(
     conversationId: string
   ): Promise<ActiveCheckoutCart | null>;
 }
-
-export interface CheckoutOrderConfirmationService {
-  isReady(conversationId: string): Promise<boolean>;
-  confirm(
+export interface CheckoutConfirmationRepository {
+  linkSummary(input: {
+    conversationId: string;
+    confirmationId: string;
+    messageId: string;
+    text: string;
+  }): Promise<void>;
+  prepare(input: {
+    conversationId: string;
+    confirmationSecret: string;
+    preparedAt: number;
+    expiresAt: number;
+    nonce: string;
+  }): Promise<PreparedCheckoutConfirmation>;
+  getPrepared(
     conversationId: string
-  ): Promise<{ orderId: string; orderNumber: string }>;
+  ): Promise<PreparedCheckoutConfirmation | null>;
+  invalidate(conversationId: string): Promise<void>;
 }
-
-function snapshotFor(
-  draft: CheckoutDraft,
-  cart: ActiveCheckoutCart
-): CheckoutSnapshot {
-  if (
-    draft.state !== 'awaiting_confirmation' ||
-    !draft.recipientName ||
-    !draft.phone ||
-    !draft.address ||
-    !draft.paymentMethod
-  ) {
-    throw new Error('Checkout is not ready for confirmation');
-  }
-  return {
-    cartId: cart.id,
-    cartVersion: cart.version,
-    recipientName: draft.recipientName,
-    phone: draft.phone,
-    address: draft.address,
-    paymentMethod: draft.paymentMethod,
-    currency: cart.currency,
-    subtotal: cart.subtotal,
-    shippingFee: 0,
-    discountTotal: 0,
-    total: cart.total
-  };
+export interface CheckoutOrderConfirmationService {
+  linkSummary(input: {
+    conversationId: string;
+    confirmationId: string;
+    messageId: string;
+    text: string;
+  }): Promise<void>;
+  prepareConfirmation(
+    conversationId: string
+  ): Promise<PreparedCheckoutConfirmation>;
+  getPrepared(
+    conversationId: string
+  ): Promise<PreparedCheckoutConfirmation | null>;
+  confirmPrepared(input: {
+    conversationId: string;
+    confirmationId: string;
+    confirmationMessageTimestamp: number;
+  }): Promise<{ orderId: string; orderNumber: string; replayed?: boolean }>;
 }
-
 export function createCheckoutOrderConfirmationService(input: {
   confirmationSecret: string;
-  checkout: CheckoutDraftRepository;
-  carts: ActiveCheckoutCartRepository;
+  confirmations: CheckoutConfirmationRepository;
   orders: OrderService;
+  now?: () => number;
 }): CheckoutOrderConfirmationService {
+  const now = input.now ?? Date.now;
   return {
-    async isReady(conversationId) {
-      const draft = await input.checkout.get(conversationId);
-      if (!draft) return false;
-      const cart = await input.carts.getActiveForConversation(conversationId);
-      try {
-        return cart !== null && snapshotFor(draft, cart).total >= 0;
-      } catch {
-        return false;
-      }
+    linkSummary: (value) => input.confirmations.linkSummary(value),
+    async prepareConfirmation(conversationId) {
+      z.uuid().parse(conversationId);
+      const preparedAt = now();
+      return input.confirmations.prepare({
+        conversationId,
+        confirmationSecret: input.confirmationSecret,
+        preparedAt,
+        expiresAt: preparedAt + 900_000,
+        nonce: randomUUID()
+      });
     },
-    async confirm(conversationId) {
-      const draft = await input.checkout.get(conversationId);
-      if (!draft) throw new Error('Checkout conversation was not found');
-      const cart = await input.carts.getActiveForConversation(conversationId);
-      if (!cart) throw new Error('Active checkout cart was not found');
-      const confirmation = createCheckoutConfirmation(
-        input.confirmationSecret,
-        snapshotFor(draft, cart)
+    getPrepared: (conversationId) =>
+      input.confirmations.getPrepared(conversationId),
+    async confirmPrepared(request) {
+      const value = z
+        .object({
+          conversationId: z.uuid(),
+          confirmationId: z.string().min(1),
+          confirmationMessageTimestamp: z.number().int().nonnegative()
+        })
+        .strict()
+        .parse(request);
+      const prepared = await input.confirmations.getPrepared(
+        value.conversationId
       );
-      return input.orders.createConfirmed(confirmation);
+      if (prepared?.confirmationId !== value.confirmationId)
+        throw new CheckoutConfirmationError('confirmation_stale');
+      const snapshot = PreparedCheckoutSnapshotSchema.parse(prepared.snapshot);
+      if (
+        snapshot.conversationId !== value.conversationId ||
+        value.confirmationMessageTimestamp <= snapshot.preparedAt ||
+        !verifyCheckoutConfirmation(
+          input.confirmationSecret,
+          snapshot,
+          prepared.confirmationId
+        )
+      )
+        throw new CheckoutConfirmationError('confirmation_stale');
+      if (
+        now() >= snapshot.expiresAt ||
+        value.confirmationMessageTimestamp >= snapshot.expiresAt
+      )
+        throw new CheckoutConfirmationError('confirmation_expired');
+      return input.orders.createConfirmed(
+        prepared,
+        value.confirmationMessageTimestamp
+      );
     }
   };
+}
+
+export function renderPreparedCheckoutConfirmation(
+  prepared: PreparedCheckoutConfirmation
+): string {
+  const snapshot = PreparedCheckoutSnapshotSchema.parse(prepared.snapshot);
+  return [
+    'Vui lòng xác nhận đơn hàng:',
+    ...snapshot.lines.map(
+      (line) =>
+        `${line.productName} / ${line.variantName} (${line.sku}) x ${String(line.quantity)}: ${String(line.unitPrice)} ${snapshot.currency}/sản phẩm, thành tiền ${String(line.lineTotal)} ${snapshot.currency}`
+    ),
+    `Tạm tính: ${String(snapshot.subtotal)} ${snapshot.currency}`,
+    `Phí giao hàng: ${String(snapshot.shippingFee)} ${snapshot.currency}`,
+    `Giảm giá: ${String(snapshot.discountTotal)} ${snapshot.currency}`,
+    `Tổng cộng: ${String(snapshot.total)} ${snapshot.currency}`,
+    `Người nhận: ${snapshot.recipientName}; điện thoại: ${'*'.repeat(Math.max(0, snapshot.phone.length - 4))}${snapshot.phone.slice(-4)}`,
+    `Địa chỉ: ${snapshot.address.line1}, ${snapshot.address.ward}, ${snapshot.address.city}`,
+    `Thanh toán: ${snapshot.paymentMethod}`,
+    'Anh/chị trả lời "xác nhận" để đặt đúng đơn hàng này. Bản tóm tắt có hiệu lực trong 15 phút.'
+  ].join('\n');
 }

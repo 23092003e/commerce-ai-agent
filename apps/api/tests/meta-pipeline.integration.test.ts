@@ -132,6 +132,83 @@ async function postSignedFixture(payload: string) {
 }
 
 describe('real Postgres and Redis webhook pipeline', () => {
+  it('holds the lease across the handler and resumes persistence after failure', async () => {
+    const suffix = randomUUID();
+    const entered: string[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let firstEntered!: () => void;
+    const firstReady = new Promise<void>((resolve) => {
+      firstEntered = resolve;
+    });
+    let calls = 0;
+    const local = new InboundMessageWorker(repository, {
+      async handle(input) {
+        entered.push(input.text);
+        if (input.text === 'first' && calls++ === 0) {
+          firstEntered();
+          await held;
+          throw new Error('after persistence');
+        }
+      }
+    });
+    const put = async (
+      id: string,
+      customer: string,
+      text: string,
+      timestamp: number
+    ) => {
+      const key = `lease-${id}-${suffix}`;
+      await repository.storeWebhookEvent({
+        externalEventKey: key,
+        metaPageId: 'lease-page',
+        conversationKey: `meta:lease-page:${customer}`,
+        eventTimestamp: timestamp,
+        rawPayload: {
+          pageId: 'lease-page',
+          event: {
+            sender: { id: customer },
+            recipient: { id: 'lease-page' },
+            timestamp,
+            message: { mid: key, text }
+          }
+        }
+      });
+      return key;
+    };
+    const customer = `lease-customer-${suffix}`;
+    const firstKey = await put('first', customer, 'first', 1);
+    const secondKey = await put('second', customer, 'second', 2);
+    const otherKey = await put('other', `other-${suffix}`, 'other', 1);
+    const first = local.process(firstKey);
+    const failure = expect(first).rejects.toThrow('after persistence');
+    await firstReady;
+    expect((await repository.getWebhookEvent(firstKey))?.processingState).toBe(
+      'processing'
+    );
+    const second = local.process(secondKey);
+    await local.process(otherKey);
+    expect(entered).toEqual(['first', 'other']);
+    release();
+    await failure;
+    await second;
+    expect((await repository.getWebhookEvent(firstKey))?.processingState).toBe(
+      'queued'
+    );
+    await local.process(firstKey);
+    await local.process(secondKey);
+    expect(entered).toEqual(['first', 'other', 'first', 'second']);
+    const count = await pool.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM messages WHERE meta_message_id=$1',
+      [firstKey]
+    );
+    expect(count.rows[0]?.count).toBe(1);
+    expect((await repository.getWebhookEvent(firstKey))?.processingState).toBe(
+      'processed'
+    );
+  });
   it('persists a signed fixture through BullMQ exactly once', async () => {
     const fixture = await readFile(
       fileURLToPath(new URL('./fixtures/text-message.json', import.meta.url)),
@@ -155,7 +232,7 @@ describe('real Postgres and Redis webhook pipeline', () => {
     expect(Number(count.rows[0]?.count)).toBe(1);
   });
 
-  it('re-enqueues an exhausted failed job when Meta redelivers it', async () => {
+  it('keeps exhausted failures terminal when Meta redelivers them', async () => {
     const fixture = await readFile(
       fileURLToPath(new URL('./fixtures/text-message.json', import.meta.url)),
       'utf8'
@@ -180,7 +257,15 @@ describe('real Postgres and Redis webhook pipeline', () => {
     expect(Number(beforeRedelivery.rows[0]?.count)).toBe(0);
 
     expect((await postSignedFixture(payload)).statusCode).toBe(200);
-    expect(await waitForMessage(messageId)).toBe(1);
+    expect((await repository.getWebhookEvent(eventKey))?.processingState).toBe(
+      'failed'
+    );
+    expect(await queue.getJobState(eventKey)).toBe('failed');
+    const afterRedelivery = await pool.query<{ count: string }>(
+      'SELECT count(*) FROM messages WHERE meta_message_id = $1',
+      [messageId]
+    );
+    expect(Number(afterRedelivery.rows[0]?.count)).toBe(0);
   });
 
   it('preserves ordering while an older same-conversation job retries', async () => {

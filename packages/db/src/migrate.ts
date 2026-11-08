@@ -9,8 +9,13 @@ export async function runMigrations(
 ): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
   const client = await pool.connect();
+  let locked = false;
 
   try {
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [
+      'fanpage:schema-migrations'
+    ]);
+    locked = true;
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         filename text PRIMARY KEY,
@@ -55,7 +60,15 @@ export async function runMigrations(
       }
     }
   } finally {
-    client.release();
-    await pool.end();
+    try {
+      if (locked)
+        await client.query(
+          'SELECT pg_advisory_unlock(hashtextextended($1, 0))',
+          ['fanpage:schema-migrations']
+        );
+    } finally {
+      client.release();
+      await pool.end();
+    }
   }
 }

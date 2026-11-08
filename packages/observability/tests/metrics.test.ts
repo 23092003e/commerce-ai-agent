@@ -39,4 +39,19 @@ describe('operational metrics', () => {
       'Metric value must be finite'
     );
   });
+
+  it('exposes independent Prometheus registries and bounds allowed label values', async () => {
+    const first = createOperationalMetrics({ info() {} });
+    const second = createOperationalMetrics({ info() {} });
+    first.increment('meta_sends_total', {
+      status: 'sent',
+      reason: 'private-customer-text'
+    });
+    first.observe('worker_duration_ms', 12);
+    const text = await first.text();
+    expect(text).toContain('meta_sends_total');
+    expect(text).toContain('worker_duration_ms_bucket');
+    expect(text).not.toContain('private-customer-text');
+    expect(await second.text()).not.toContain('status="sent"');
+  });
 });

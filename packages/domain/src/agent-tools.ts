@@ -3,6 +3,47 @@ import type { CartService } from './cart.js';
 import type { CheckoutFlow } from './checkout-flow.js';
 import type { KnowledgeService } from './knowledge.js';
 import type { AgentTool } from './agent-orchestrator.js';
+import { z } from 'zod';
+import type { CheckoutOrderConfirmationService } from './checkout-order.js';
+
+export function createScopedCartAgentTools(input: {
+  cart: CartService;
+  customerId: string;
+  conversationId: string;
+}): AgentTool[] {
+  const line = z
+    .object({ variantId: z.uuid(), quantity: z.number().int().min(1).max(99) })
+    .strict();
+  return [
+    {
+      name: 'cart.add',
+      execute: async (value) =>
+        input.cart.add({
+          ...line.parse(value),
+          customerId: input.customerId,
+          conversationId: input.conversationId
+        })
+    },
+    {
+      name: 'cart.update',
+      execute: async (value) =>
+        input.cart.update({
+          ...line.parse(value),
+          customerId: input.customerId,
+          conversationId: input.conversationId
+        })
+    },
+    {
+      name: 'cart.remove',
+      execute: async (value) =>
+        input.cart.remove({
+          ...line.omit({ quantity: true }).parse(value),
+          customerId: input.customerId,
+          conversationId: input.conversationId
+        })
+    }
+  ];
+}
 
 export function createReadOnlyAgentTools(input: {
   catalog: CatalogService;
@@ -52,8 +93,22 @@ function scopedCheckoutInput(value: unknown, conversationId: string): unknown {
 export function createCheckoutAgentTools(input: {
   checkout: CheckoutFlow;
   conversationId: string;
+  confirmation?: CheckoutOrderConfirmationService;
 }): AgentTool[] {
   return [
+    ...(input.confirmation
+      ? [
+          {
+            name: 'checkout.prepareConfirmation' as const,
+            execute: async (value: unknown) => {
+              z.object({}).strict().parse(value);
+              return input.confirmation?.prepareConfirmation(
+                input.conversationId
+              );
+            }
+          }
+        ]
+      : []),
     {
       name: 'checkout.start',
       execute: () => input.checkout.start(input.conversationId)

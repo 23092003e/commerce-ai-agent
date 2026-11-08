@@ -1,11 +1,75 @@
 import { describe, expect, it } from 'vitest';
 import { createCartService } from '../src/index.js';
+import { createScopedCartAgentTools } from '../src/agent-tools.js';
+import { vi } from 'vitest';
 
 const customerId = '11111111-1111-4111-8111-111111111111';
 const conversationId = '22222222-2222-4222-8222-222222222222';
 const variantId = '33333333-3333-4333-8333-333333333333';
 
 describe('cart service', () => {
+  it('scopes every model mutation and rejects model ownership identifiers', async () => {
+    const cart = { add: vi.fn(), update: vi.fn(), remove: vi.fn() };
+    const tools = createScopedCartAgentTools({
+      cart,
+      customerId,
+      conversationId
+    });
+    for (const tool of tools) {
+      for (const key of ['cartId', 'customerId', 'conversationId']) {
+        await expect(
+          tool.execute({
+            variantId,
+            ...(tool.name === 'cart.remove' ? {} : { quantity: 1 }),
+            [key]: customerId
+          })
+        ).rejects.toThrow();
+      }
+      await tool.execute({
+        variantId,
+        ...(tool.name === 'cart.remove' ? {} : { quantity: 1 })
+      });
+    }
+    expect(cart.update).toHaveBeenCalledWith({
+      customerId,
+      conversationId,
+      variantId,
+      quantity: 1
+    });
+    expect(cart.remove).toHaveBeenCalledWith({
+      customerId,
+      conversationId,
+      variantId
+    });
+  });
+
+  it('rejects quantity updates beyond inventory before repository mutation', async () => {
+    const setLineQuantity = vi.fn();
+    const service = createCartService({
+      catalog: {
+        getVariant: vi.fn(async () => ({
+          variantId,
+          productId: customerId,
+          sku: 'SKU',
+          title: 'Small',
+          color: null,
+          size: null,
+          price: 120000,
+          currency: 'VND',
+          available: true,
+          availableQuantity: 1
+        })),
+        searchProducts: vi.fn(),
+        getProduct: vi.fn(),
+        checkInventory: vi.fn()
+      },
+      repository: { upsertLine: vi.fn(), setLineQuantity, removeLine: vi.fn() }
+    });
+    await expect(
+      service.update({ customerId, conversationId, variantId, quantity: 2 })
+    ).rejects.toThrow('inventory_unavailable');
+    expect(setLineQuantity).not.toHaveBeenCalled();
+  });
   it('uses catalog price and rejects an LLM-supplied price', async () => {
     const service = createCartService({
       catalog: {

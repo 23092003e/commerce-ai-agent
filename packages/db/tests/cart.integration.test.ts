@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { PostgresCartRepository, runMigrations } from '../src/index.js';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { seedCommerceFixture } from './commerce-fixture.js';
 
 const databaseUrl =
   process.env.DATABASE_URL ??
@@ -21,6 +22,53 @@ afterAll(async () => {
 });
 
 describe('Postgres cart', () => {
+  it('enforces customer/conversation ownership for add, update and removal', async () => {
+    const owner = await seedCommerceFixture(pool);
+    const attacker = await seedCommerceFixture(pool);
+    const cart = await repository.upsertLine({ ...owner, quantity: 1 });
+    const forged = { ...owner, customerId: attacker.customerId, quantity: 2 };
+    await expect(repository.upsertLine(forged)).rejects.toThrow(
+      'cart_scope_mismatch'
+    );
+    await expect(
+      repository.setLineQuantity({
+        customerId: attacker.customerId,
+        conversationId: owner.conversationId,
+        variantId: owner.variantId,
+        quantity: 2
+      })
+    ).rejects.toThrow('cart_scope_mismatch');
+    await expect(
+      repository.removeLine({
+        customerId: attacker.customerId,
+        conversationId: owner.conversationId,
+        variantId: owner.variantId
+      })
+    ).rejects.toThrow('cart_scope_mismatch');
+    expect(
+      (await repository.getActiveForConversation(owner.conversationId))?.total
+    ).toBe(cart.total);
+  });
+
+  it('rejects unavailable quantities atomically and leaves the cart version unchanged', async () => {
+    const owner = await seedCommerceFixture(pool, 1);
+    const cart = await repository.upsertLine({ ...owner, quantity: 1 });
+    const before = await repository.getActiveForConversation(
+      owner.conversationId
+    );
+    await expect(
+      repository.setLineQuantity({
+        customerId: owner.customerId,
+        conversationId: owner.conversationId,
+        variantId: owner.variantId,
+        quantity: 2
+      })
+    ).rejects.toThrow('inventory_unavailable');
+    expect(
+      await repository.getActiveForConversation(owner.conversationId)
+    ).toEqual(before);
+    expect(cart.total).toBe(120000);
+  });
   it('persists a single active cart and recalculates server totals', async () => {
     const suffix = randomUUID();
     const seeded = await pool.query<{

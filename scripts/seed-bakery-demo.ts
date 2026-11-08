@@ -313,8 +313,8 @@ try {
     if (!categoryId) throw new Error(`Missing category: ${product.category}`);
     const saved = await pool.query<{ id: string }>(
       `INSERT INTO products (external_id, sku, name, slug, description, category_id, brand, status, base_price, currency, attributes, search_text)
-       VALUES ($1,$2,$3,$4,$5,$6,'Bánh Mây Atelier','active',$7,'VND',$8,$9)
-       ON CONFLICT (slug) DO UPDATE SET external_id=EXCLUDED.external_id, sku=EXCLUDED.sku, name=EXCLUDED.name, description=EXCLUDED.description, category_id=EXCLUDED.category_id, status='active', base_price=EXCLUDED.base_price, attributes=EXCLUDED.attributes, search_text=EXCLUDED.search_text, updated_at=now()
+       VALUES ($1,$2,$3,$4,$5,$6,'Monexis','active',$7,'VND',$8,$9)
+       ON CONFLICT (slug) DO UPDATE SET external_id=EXCLUDED.external_id, sku=EXCLUDED.sku, name=EXCLUDED.name, description=EXCLUDED.description, category_id=EXCLUDED.category_id, brand=EXCLUDED.brand, status='active', base_price=EXCLUDED.base_price, attributes=EXCLUDED.attributes, search_text=EXCLUDED.search_text, updated_at=now()
        RETURNING id`,
       [
         product.externalId,
@@ -360,7 +360,7 @@ try {
   }
   await pool.query('COMMIT');
   console.log(
-    `Seeded ${String(products.length)} Bánh Mây Atelier demo products and archived the former apparel demo catalog.`
+    `Seeded ${String(products.length)} Monexis bakery demo products and archived the former apparel demo catalog.`
   );
 } catch (error) {
   await pool.query('ROLLBACK');

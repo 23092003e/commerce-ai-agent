@@ -44,6 +44,11 @@ describe('knowledge service', () => {
     const document = calls[0];
     if (!document) throw new Error('Expected ingested document');
     expect(document.title).toBe('Shipping policy');
+    expect(document.embeddingProvider).toBe('deterministic');
+    expect(document.embeddingModel).toBe('legacy-8d');
+    expect(document.normalizedContent).toContain(
+      'Orders arrive in 2 business days.'
+    );
     expect(document.contentHash).toMatch(/^[a-f0-9]{64}$/u);
     const firstChunk = document.chunks[0];
     if (!firstChunk) throw new Error('Expected knowledge chunk');

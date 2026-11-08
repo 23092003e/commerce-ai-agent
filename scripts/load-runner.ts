@@ -4,6 +4,7 @@ export interface LoadSummary {
   failed: number;
   p50Ms: number;
   p95Ms: number;
+  p99Ms: number;
 }
 
 export async function runConcurrentLoad(input: {
@@ -61,6 +62,7 @@ export async function runConcurrentLoad(input: {
     succeeded,
     failed,
     p50Ms: percentile(50),
-    p95Ms: percentile(95)
+    p95Ms: percentile(95),
+    p99Ms: percentile(99)
   };
 }

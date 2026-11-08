@@ -391,7 +391,7 @@ Release evidence includes:
 ### 3.13 Deployment target
 
 The zero-cost demonstration target is the existing Windows host running Docker
-Desktop with Cloudflare Tunnel and `boywithlycoris.online`. The machine must
+Desktop with Cloudflare Tunnel and a confirmed project hostname. The machine must
 remain powered on and connected; this is not a highly available production
 platform.
 

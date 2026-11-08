@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CheckoutConfirmationError } from './checkout.js';
 import type { CatalogService } from './catalog.js';
 
 const CartMutationSchema = z
@@ -9,13 +10,7 @@ const CartMutationSchema = z
     quantity: z.number().int().min(1).max(99)
   })
   .strict();
-const CartLineMutationSchema = z
-  .object({
-    cartId: z.uuid(),
-    variantId: z.uuid(),
-    quantity: z.number().int().min(1).max(99)
-  })
-  .strict();
+const CartLineMutationSchema = CartMutationSchema;
 const RemoveCartLineSchema = CartLineMutationSchema.omit({ quantity: true });
 
 export interface CartLine {
@@ -47,11 +42,16 @@ export interface CartRepository {
     currency: string;
   }): Promise<Cart>;
   setLineQuantity(input: {
-    cartId: string;
+    customerId: string;
+    conversationId: string;
     variantId: string;
     quantity: number;
   }): Promise<Cart>;
-  removeLine(input: { cartId: string; variantId: string }): Promise<void>;
+  removeLine(input: {
+    customerId: string;
+    conversationId: string;
+    variantId: string;
+  }): Promise<void>;
 }
 export interface CartService {
   add(input: unknown): Promise<Cart>;
@@ -74,7 +74,7 @@ export function createCartService(input: {
         !variant.available ||
         variant.availableQuantity < mutation.quantity
       ) {
-        throw new Error('Requested quantity is not available');
+        throw new CheckoutConfirmationError('inventory_unavailable');
       }
       return input.repository.upsertLine({
         customerId: mutation.customerId,
@@ -90,6 +90,15 @@ export function createCartService(input: {
     },
     async update(value) {
       const mutation = CartLineMutationSchema.parse(value);
+      const variant = await input.catalog.getVariant({
+        variantId: mutation.variantId
+      });
+      if (
+        !variant ||
+        !variant.available ||
+        variant.availableQuantity < mutation.quantity
+      )
+        throw new CheckoutConfirmationError('inventory_unavailable');
       return input.repository.setLineQuantity(mutation);
     },
     async remove(value) {

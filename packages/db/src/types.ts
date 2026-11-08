@@ -66,7 +66,64 @@ export type PersistInboundMessageResult =
       conversation: ConversationView;
     };
 
+export interface ConversationLeaseContext {
+  readonly conversationKey: string;
+  readonly token: symbol;
+}
+
+export type OutboundDeliveryState =
+  | 'queued'
+  | 'sending'
+  | 'retryable'
+  | 'sent'
+  | 'delivered'
+  | 'unknown'
+  | 'failed';
+export interface OutboundMessageView {
+  id: string;
+  conversationId: string;
+  inboundMessageId: string;
+  recipientId: string;
+  outboundKey: string;
+  text: string;
+  deliveryState: OutboundDeliveryState;
+  attempts: number;
+  lastErrorCode: string | null;
+}
+export interface OutboundMessageRepository {
+  planText(input: {
+    conversationId: string;
+    inboundMessageId: string;
+    recipientId: string;
+    outboundKey: string;
+    text: string;
+  }): Promise<OutboundMessageView>;
+  findByInboundMessage(id: string): Promise<OutboundMessageView | null>;
+  claimForSend(
+    id: string
+  ): Promise<'claimed' | 'already_sent' | 'uncertain' | 'suppressed'>;
+  markSent(id: string, metaMessageId: string): Promise<void>;
+  markRetryable(id: string, code: string, message: string): Promise<void>;
+  markUnknown(id: string, code: string, message: string): Promise<void>;
+  markFailed(id: string, code: string, message: string): Promise<void>;
+}
+
 export interface CommerceRepository {
+  ensureInboundMessage(input: PersistInboundMessageInput): Promise<{
+    messageId: string;
+    customerId: string;
+    conversation: ConversationView;
+    inserted: boolean;
+  }>;
+  withConversationLease<T>(
+    key: string,
+    operation: (lease: ConversationLeaseContext) => Promise<T>
+  ): Promise<T>;
+  markWebhookEventProcessed(eventKey: string): Promise<void>;
+  markWebhookEventQueuedForRetry(
+    eventKey: string,
+    errorCode: string
+  ): Promise<void>;
   storeWebhookEvent(input: StoreWebhookEventInput): Promise<StoredWebhookEvent>;
   markWebhookEventQueued(eventKey: string): Promise<void>;
   getWebhookEvent(eventKey: string): Promise<StoredWebhookEvent | null>;

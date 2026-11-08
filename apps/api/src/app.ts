@@ -1,4 +1,5 @@
 import Fastify, {
+  LogController,
   type FastifyBaseLogger,
   type FastifyError,
   type FastifyInstance,
@@ -13,6 +14,11 @@ import {
 import { z } from 'zod';
 import type { CommerceRepository } from '@fanpage/db';
 import type { OperationalMetrics } from '@fanpage/observability';
+import {
+  registerAdminSession,
+  type AdminSessionOptions
+} from './services/admin-session.js';
+import { registerAdminAssets } from './services/admin-assets.js';
 import { isAuthorizedAdmin } from './services/admin-auth.js';
 import type { WebhookIngestion } from './services/webhook-ingestion.js';
 
@@ -199,14 +205,17 @@ export interface AdminOperationalData {
 
 export interface BuildAppOptions {
   config: ApiConfig;
+  adminAssetsDirectory?: string;
   ingestion?: WebhookIngestion;
   readiness?: { check(): Promise<void> };
   logger?: FastifyBaseLogger;
   metrics?: OperationalMetrics;
+  metricsAuthSecret?: string;
   messagingChannel?: MessagingChannel;
   enableTestMessagingRoutes?: boolean;
   admin?: {
     secret?: string;
+    session?: AdminSessionOptions;
     repository: CommerceRepository;
     data?: AdminOperationalData;
     knowledge?: {
@@ -218,6 +227,33 @@ export interface BuildAppOptions {
       >;
     };
     handovers?: {
+      takeOver?(input: {
+        conversationId: string;
+        expectedVersion: number;
+        adminActor: string;
+      }): Promise<{
+        type: 'updated' | 'conflict' | 'not_found' | 'invalid_transition';
+        conversation?: unknown;
+        currentVersion?: number;
+      }>;
+      resolveToAi?(input: {
+        conversationId: string;
+        expectedVersion: number;
+        adminActor: string;
+      }): Promise<{
+        type: 'updated' | 'conflict' | 'not_found' | 'invalid_transition';
+        conversation?: unknown;
+        currentVersion?: number;
+      }>;
+      pause?(input: {
+        conversationId: string;
+        expectedVersion: number;
+        adminActor: string;
+      }): Promise<{
+        type: 'updated' | 'conflict' | 'not_found' | 'invalid_transition';
+        conversation?: unknown;
+        currentVersion?: number;
+      }>;
       resolve(input: {
         conversationId: string;
         expectedVersion: number;
@@ -228,16 +264,19 @@ export interface BuildAppOptions {
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const app: FastifyInstance = options.logger
-    ? Fastify({ loggerInstance: options.logger })
+    ? Fastify({
+        loggerInstance: options.logger,
+        logController: new LogController({ disableRequestLogging: true })
+      })
     : Fastify({ logger: false });
 
   app.setErrorHandler(
-    (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+    (_error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
       options.logger?.error(
         {
-          error: { name: error.name, message: error.message },
+          error: { code: 'internal_error' },
           method: request.method,
-          url: request.url
+          route: request.routeOptions.url
         },
         'Unhandled API request failure'
       );
@@ -254,21 +293,41 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   );
 
   app.get('/health', async () => ({ status: 'ok' }));
+  let hasAdminSession: (cookieHeader: string | undefined) => boolean = () =>
+    false;
+  if (options.metrics?.text) {
+    app.get('/internal/metrics', async (request, reply) => {
+      if (
+        !hasAdminSession(request.headers.cookie) &&
+        !isAuthorizedAdmin(
+          request.headers.authorization,
+          options.metricsAuthSecret
+        )
+      ) {
+        return reply.code(401).send({ error: 'metrics_unauthorized' });
+      }
+      return reply
+        .header('cache-control', 'no-store')
+        .type(options.metrics?.contentType ?? 'text/plain; version=0.0.4')
+        .send(await options.metrics?.text?.());
+    });
+  }
+  if (options.adminAssetsDirectory)
+    registerAdminAssets(app, options.adminAssetsDirectory);
   if (options.admin) {
     const admin = options.admin;
-    app.get('/internal/admin/conversations', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    hasAdminSession = registerAdminSession(
+      app,
+      admin.secret,
+      admin.session
+    ).isAuthenticated;
+    app.get('/internal/admin/conversations', async () => {
       if (!admin.data) return { conversations: [] };
       return { conversations: await admin.data.listConversations() };
     });
     app.get(
       '/internal/admin/conversations/:conversationId/messages',
       async (request, reply) => {
-        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-          return reply.code(401).send({ error: 'admin_unauthorized' });
-        }
         const params = z
           .object({ conversationId: z.uuid() })
           .safeParse(request.params);
@@ -282,16 +341,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return { messages };
       }
     );
-    app.get('/internal/admin/orders', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    app.get('/internal/admin/orders', async () => {
       return { orders: (await admin.data?.listOrders?.()) ?? [] };
     });
     app.get('/internal/admin/orders/:orderId', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
       const params = z.object({ orderId: z.uuid() }).safeParse(request.params);
       if (!params.success)
         return reply.code(400).send({ error: 'invalid_admin_request' });
@@ -299,16 +352,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!order) return reply.code(404).send({ error: 'order_not_found' });
       return { order };
     });
-    app.get('/internal/admin/products', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    app.get('/internal/admin/products', async () => {
       return { products: (await admin.data?.listProducts?.()) ?? [] };
     });
     app.get('/internal/admin/products/:productId', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
       const params = z
         .object({ productId: z.uuid() })
         .safeParse(request.params);
@@ -320,15 +367,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!product) return reply.code(404).send({ error: 'product_not_found' });
       return { product };
     });
-    app.get('/internal/admin/customers', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    app.get('/internal/admin/customers', async () => {
       return { customers: (await admin.data?.listCustomers?.()) ?? [] };
     });
     app.get('/internal/admin/customers/:customerId', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-        return reply.code(401).send({ error: 'admin_unauthorized' });
       const params = z
         .object({ customerId: z.uuid() })
         .safeParse(request.params);
@@ -341,18 +383,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return reply.code(404).send({ error: 'customer_not_found' });
       return { customer };
     });
-    app.get('/internal/admin/knowledge', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    app.get('/internal/admin/knowledge', async () => {
       return {
         documents: (await admin.data?.listKnowledgeDocuments?.()) ?? []
       };
     });
     app.post('/internal/admin/knowledge', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
       if (!admin.knowledge)
         return reply.code(501).send({ error: 'knowledge_unavailable' });
       let requestBody: unknown;
@@ -372,9 +408,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     app.delete(
       '/internal/admin/knowledge/:documentId',
       async (request, reply) => {
-        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-          return reply.code(401).send({ error: 'admin_unauthorized' });
-        }
         const params = z
           .object({ documentId: z.uuid() })
           .safeParse(request.params);
@@ -393,15 +426,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         return { archived: true };
       }
     );
-    app.get('/internal/admin/agent-runs', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-        return reply.code(401).send({ error: 'admin_unauthorized' });
-      }
+    app.get('/internal/admin/agent-runs', async () => {
       return { runs: (await admin.data?.listAgentRuns?.()) ?? [] };
     });
     app.get('/internal/admin/agent-runs/:runId', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-        return reply.code(401).send({ error: 'admin_unauthorized' });
       const params = z.object({ runId: z.uuid() }).safeParse(request.params);
       if (!params.success)
         return reply.code(400).send({ error: 'invalid_admin_request' });
@@ -409,16 +437,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!run) return reply.code(404).send({ error: 'agent_run_not_found' });
       return { run };
     });
-    app.get('/internal/admin/handovers', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-        return reply.code(401).send({ error: 'admin_unauthorized' });
+    app.get('/internal/admin/handovers', async () => {
       return { handovers: (await admin.data?.listHandovers?.()) ?? [] };
     });
     app.post(
       '/internal/admin/handovers/:conversationId/resolve',
       async (request, reply) => {
-        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-          return reply.code(401).send({ error: 'admin_unauthorized' });
         const params = z
           .object({ conversationId: z.uuid() })
           .safeParse(request.params);
@@ -432,6 +456,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         }
         const body = z
           .object({ expectedVersion: z.number().int().positive() })
+          .strict()
           .safeParse(raw);
         if (!params.success || !body.success)
           return reply.code(400).send({ error: 'invalid_admin_request' });
@@ -443,14 +468,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         });
       }
     );
-    app.get('/internal/admin/carts', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-        return reply.code(401).send({ error: 'admin_unauthorized' });
+    app.get('/internal/admin/carts', async () => {
       return { carts: (await admin.data?.listCarts?.()) ?? [] };
     });
     app.get('/internal/admin/carts/:cartId', async (request, reply) => {
-      if (!isAuthorizedAdmin(request.headers.authorization, admin.secret))
-        return reply.code(401).send({ error: 'admin_unauthorized' });
       const params = z.object({ cartId: z.uuid() }).safeParse(request.params);
       if (!params.success)
         return reply.code(400).send({ error: 'invalid_admin_request' });
@@ -461,9 +482,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     app.post(
       '/internal/admin/conversations/:conversationId/control',
       async (request, reply) => {
-        if (!isAuthorizedAdmin(request.headers.authorization, admin.secret)) {
-          return reply.code(401).send({ error: 'admin_unauthorized' });
-        }
         const params = z
           .object({ conversationId: z.uuid() })
           .safeParse(request.params);
@@ -480,20 +498,44 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
             expectedVersion: z.number().int().positive(),
             controlMode: z.enum(['ai', 'human', 'paused'])
           })
+          .strict()
           .safeParse(requestBody);
         if (!params.success || !body.success)
           return reply.code(400).send({ error: 'invalid_admin_request' });
-        const result = await admin.repository.updateConversationControlMode({
-          conversationId: params.data.conversationId,
-          ...body.data
-        });
+        const command =
+          body.data.controlMode === 'ai'
+            ? admin.handovers?.resolveToAi?.bind(admin.handovers)
+            : body.data.controlMode === 'human'
+              ? admin.handovers?.takeOver?.bind(admin.handovers)
+              : admin.handovers?.pause?.bind(admin.handovers);
+        if (
+          !command &&
+          !(
+            admin.session?.legacyBearerEnabled &&
+            !admin.session.production &&
+            process.env.NODE_ENV !== 'production'
+          )
+        )
+          return reply.code(501).send({ error: 'control_unavailable' });
+        const result = command
+          ? await command.call(admin.handovers, {
+              conversationId: params.data.conversationId,
+              expectedVersion: body.data.expectedVersion,
+              adminActor: 'demo-admin'
+            })
+          : await admin.repository.updateConversationControlMode({
+              conversationId: params.data.conversationId,
+              ...body.data
+            });
         return reply
           .code(
             result.type === 'updated'
               ? 200
               : result.type === 'conflict'
                 ? 409
-                : 404
+                : result.type === 'invalid_transition'
+                  ? 422
+                  : 404
           )
           .send(result);
       }

@@ -12,13 +12,16 @@
     "db:migrate": "pnpm --filter @fanpage/db migrate",
     "dev": "pnpm --filter @fanpage/api dev",
     "fixture:send": "tsx --env-file=.env scripts/send-meta-fixture.ts",
-    "load:webhook": "tsx --env-file=.env scripts/load-webhook-fixture.ts",
+    "load:webhook": "tsx --env-file-if-exists=.env.load scripts/load-webhook-fixture.ts",
     "seed:bakery-demo": "tsx --env-file=.env scripts/seed-bakery-demo.ts",
     "format": "prettier --write .",
     "lint": "eslint . && prettier --check .",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify:release": "tsx scripts/verify-release.ts",
+    "knowledge:reindex": "tsx scripts/reindex-knowledge.ts",
+    "eval:live-agent": "tsx scripts/evaluate-live-agent.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

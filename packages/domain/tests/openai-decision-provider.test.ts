@@ -1,6 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import { createOpenAiDecisionProvider } from '../src/index.js';
 describe('OpenAI decision provider', () => {
+  it('does not send OpenRouter reasoning settings to OpenAI', async () => {
+    let body: unknown;
+    const provider = createOpenAiDecisionProvider({
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetch: async (_url, request) => {
+        if (typeof request.body !== 'string')
+          throw new Error('Expected JSON request body');
+        body = JSON.parse(request.body);
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              output: [
+                {
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: '{"type":"handover","reason":"needs_staff"}'
+                    }
+                  ]
+                }
+              ]
+            };
+          }
+        };
+      }
+    });
+    await provider.decide({
+      context: {
+        customerMessage: 'help',
+        controlMode: 'ai',
+        productReferences: [],
+        recentMessages: [],
+        cart: null,
+        checkout: null
+      },
+      toolResults: []
+    });
+    expect(body).not.toHaveProperty('reasoning.enabled');
+  });
   it('extracts a structured decision without exposing the key', async () => {
     let requestUrl = '';
     let requestBody: unknown;
@@ -39,7 +81,10 @@ describe('OpenAI decision provider', () => {
         context: {
           customerMessage: 'help',
           controlMode: 'ai',
-          productReferences: []
+          productReferences: [],
+          recentMessages: [],
+          cart: null,
+          checkout: null
         },
         toolResults: []
       })

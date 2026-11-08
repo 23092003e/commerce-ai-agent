@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { goldenScenarios, runGoldenScenario } from '../src/index.js';
+import { goldenScenarios } from '../src/golden-scenarios.js';
+import { runGoldenScenario } from '../src/evals.js';
 
-describe('golden scenarios', () => {
-  it('covers at least fifty uniquely named scenarios across every release-risk category', () => {
+describe('behavioral golden release contracts', () => {
+  it('covers all risk categories, at least fifty literal cases and cross-turn/failure paths', () => {
     expect(goldenScenarios.length).toBeGreaterThanOrEqual(50);
     expect(new Set(goldenScenarios.map((scenario) => scenario.id)).size).toBe(
       goldenScenarios.length
@@ -20,10 +21,33 @@ describe('golden scenarios', () => {
         'human'
       ])
     );
+    expect(
+      goldenScenarios.filter((scenario) => scenario.turns.length > 1).length
+    ).toBeGreaterThanOrEqual(5);
+    expect(
+      goldenScenarios.filter((scenario) => scenario.failureInjection).length
+    ).toBeGreaterThanOrEqual(5);
+    for (const scenario of goldenScenarios) {
+      expect(Object.keys(scenario.expected)).toEqual(
+        expect.arrayContaining([
+          'outcome',
+          'calls',
+          'factRefs',
+          'evidenceChunkIds',
+          'state',
+          'forbiddenCalls',
+          'forbiddenEffects'
+        ])
+      );
+    }
   });
 
-  it('passes every deterministic golden scenario', async () => {
-    const results = await Promise.all(goldenScenarios.map(runGoldenScenario));
-    expect(results.filter((result) => !result.passed)).toEqual([]);
-  });
+  for (const scenario of goldenScenarios) {
+    it(`${scenario.category}: ${scenario.id}`, async () => {
+      const result = await runGoldenScenario(scenario);
+      expect(result.failures).toEqual([]);
+      expect(result.passed).toBe(true);
+      expect(result.assertionCount).toBeGreaterThanOrEqual(6);
+    });
+  }
 });

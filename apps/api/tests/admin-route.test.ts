@@ -11,7 +11,7 @@ describe('admin conversation control route', () => {
         metaAppSecret: 'a'.repeat(16),
         metaVerifyToken: 'b'.repeat(16)
       },
-      admin: { secret, repository }
+      admin: { secret, session: { legacyBearerEnabled: true }, repository }
     });
     const url = `/internal/admin/conversations/${conversationId}/control`;
     const denied = await app.inject({
@@ -45,6 +45,7 @@ describe('admin conversations route', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -97,6 +98,7 @@ describe('admin conversations route', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -151,6 +153,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -263,6 +266,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         knowledge: {
           async ingest(value) {
@@ -312,6 +316,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -365,6 +370,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -415,6 +421,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -456,6 +463,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -503,6 +511,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         handovers: {
           async resolve(input) {
@@ -543,6 +552,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -609,6 +619,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -660,6 +671,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {
@@ -694,6 +706,7 @@ describe('admin operational data routes', () => {
       },
       admin: {
         secret,
+        session: { legacyBearerEnabled: true },
         repository,
         data: {
           async listConversations() {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   CommerceRepository,
+  ConversationLeaseContext,
   ConversationView,
   PersistInboundMessageInput,
   PersistInboundMessageResult,
@@ -13,6 +14,56 @@ import type {
 } from './types.js';
 
 export class InMemoryCommerceRepository implements CommerceRepository {
+  async ensureInboundMessage(input: PersistInboundMessageInput): Promise<{
+    messageId: string;
+    customerId: string;
+    conversation: ConversationView;
+    inserted: boolean;
+  }> {
+    const inserted = !this.messages.has(input.metaMessageId);
+    const result = await this.persistInboundMessage(input);
+    if (result.type !== 'persisted') throw new Error('Inbound event not found');
+    return {
+      messageId: result.messageId,
+      customerId: result.customerId,
+      conversation: result.conversation,
+      inserted
+    };
+  }
+  private readonly leases = new Map<string, Promise<void>>();
+
+  async withConversationLease<T>(
+    key: string,
+    operation: (lease: ConversationLeaseContext) => Promise<T>
+  ): Promise<T> {
+    const previous = this.leases.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.leases.set(key, current);
+    await previous;
+    try {
+      return await operation({ conversationKey: key, token: Symbol(key) });
+    } finally {
+      release();
+      if (this.leases.get(key) === current) this.leases.delete(key);
+    }
+  }
+
+  async markWebhookEventProcessed(eventKey: string): Promise<void> {
+    const event = this.events.get(eventKey);
+    if (
+      event &&
+      !['processed', 'ignored', 'failed'].includes(event.processingState)
+    )
+      event.processingState = 'processed';
+  }
+
+  async markWebhookEventQueuedForRetry(eventKey: string): Promise<void> {
+    await this.markWebhookEventQueued(eventKey);
+  }
+
   private readonly events = new Map<string, StoredWebhookEvent>();
   private readonly pages = new Map<
     string,
@@ -55,7 +106,10 @@ export class InMemoryCommerceRepository implements CommerceRepository {
 
   async markWebhookEventQueued(eventKey: string): Promise<void> {
     const event = this.events.get(eventKey);
-    if (event && event.processingState !== 'processed') {
+    if (
+      event &&
+      !['processed', 'ignored', 'failed'].includes(event.processingState)
+    ) {
       event.processingState = 'queued';
     }
   }
@@ -72,7 +126,8 @@ export class InMemoryCommerceRepository implements CommerceRepository {
     if (!event) return { type: 'not_found' };
     if (
       event.processingState === 'processed' ||
-      event.processingState === 'ignored'
+      event.processingState === 'ignored' ||
+      event.processingState === 'failed'
     ) {
       return { type: 'terminal' };
     }
@@ -93,6 +148,7 @@ export class InMemoryCommerceRepository implements CommerceRepository {
     }
 
     event.processingState = 'processing';
+    event.attempts += 1;
     return { type: 'claimed', event: structuredClone(event) };
   }
 
@@ -100,7 +156,7 @@ export class InMemoryCommerceRepository implements CommerceRepository {
     input: PersistInboundMessageInput
   ): Promise<PersistInboundMessageResult> {
     const event = this.events.get(input.eventKey);
-    if (!event || event.processingState === 'processed') {
+    if (!event) {
       return { type: 'duplicate' };
     }
 
@@ -150,9 +206,8 @@ export class InMemoryCommerceRepository implements CommerceRepository {
       conversation.version += 1;
     }
 
-    event.processingState = 'processed';
-    event.attempts += 1;
-    return inserted && messageId
+    messageId ??= this.messages.get(input.metaMessageId)?.id ?? null;
+    return messageId
       ? {
           type: 'persisted',
           messageId,
@@ -177,24 +232,39 @@ export class InMemoryCommerceRepository implements CommerceRepository {
   async updateConversationControlMode(
     input: UpdateConversationControlModeInput
   ): Promise<UpdateConversationControlModeResult> {
-    const conversation = [...this.conversations.values()].find(
+    const existing = [...this.conversations.values()].find(
       (candidate) => candidate.id === input.conversationId
     );
-    if (!conversation) return { type: 'not_found' };
-    if (conversation.version !== input.expectedVersion) {
-      return { type: 'conflict', currentVersion: conversation.version };
-    }
+    if (!existing) return { type: 'not_found' };
+    const page = [...this.pages.values()].find(
+      (candidate) => candidate.id === existing.pageId
+    );
+    const customer = [...this.customers.values()].find(
+      (candidate) => candidate.id === existing.customerId
+    );
+    if (!page || !customer) return { type: 'not_found' };
+    return this.withConversationLease<UpdateConversationControlModeResult>(
+      `meta:${page.metaPageId}:${customer.metaPsid}`,
+      async () => {
+        const conversation = [...this.conversations.values()].find(
+          (candidate) => candidate.id === input.conversationId
+        );
+        if (!conversation) return { type: 'not_found' };
+        if (conversation.version !== input.expectedVersion) {
+          return { type: 'conflict', currentVersion: conversation.version };
+        }
 
-    conversation.controlMode = input.controlMode;
-    conversation.version += 1;
-    return { type: 'updated', conversation: structuredClone(conversation) };
+        conversation.controlMode = input.controlMode;
+        conversation.version += 1;
+        return { type: 'updated', conversation: structuredClone(conversation) };
+      }
+    );
   }
 
   async markWebhookEventIgnored(eventKey: string): Promise<void> {
     const event = this.events.get(eventKey);
     if (event && event.processingState !== 'processed') {
       event.processingState = 'ignored';
-      event.attempts += 1;
     }
   }
 
@@ -207,7 +277,6 @@ export class InMemoryCommerceRepository implements CommerceRepository {
       event.processingState !== 'failed'
     ) {
       event.processingState = 'failed';
-      event.attempts += 1;
     }
   }
 
