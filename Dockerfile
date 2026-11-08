@@ -36,6 +36,7 @@ COPY --from=build /app/packages/domain/dist packages/domain/dist
 COPY --from=build /app/packages/meta/dist packages/meta/dist
 COPY --from=build /app/packages/observability/dist packages/observability/dist
 COPY --from=build /app/packages/queue/dist packages/queue/dist
+COPY scripts/render-start.sh scripts/render-start.sh
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app

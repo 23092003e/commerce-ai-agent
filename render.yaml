@@ -3,7 +3,7 @@ services:
     name: fanpage-sales-agent
     runtime: docker
     plan: free
-    dockerCommand: /bin/sh -c 'node packages/db/dist/migrate-cli.js && exec node apps/api/dist/main.js'
+    dockerCommand: /bin/sh /app/scripts/render-start.sh
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
