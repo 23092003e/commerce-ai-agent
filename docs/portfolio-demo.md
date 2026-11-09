@@ -7,7 +7,7 @@ This project is a portfolio demonstration using **Monexis**, a fictional bakery.
 1. **Architecture.** Show the README diagram and explain signed ingress, PostgreSQL persistence, the queue, catalog tools and operator control. Render's free queue is volatile; the application recovers persisted pending events while its worker is running.
 2. **Verified catalog flow.** Ask “Cửa hàng đang bán sản phẩm nào?” and show the three catalog-backed prices. Ask “Butter Croissant giá bao nhiêu, còn hàng không?” and compare both variants with the Admin Products view. These two exact paths have been tested through Messenger.
 3. **Human control.** Show the operator console and explain the AI, human and paused modes. Only demonstrate a handover live after verifying it in the current deployment.
-4. **RAG and checkout.** Explain that a fictional demo document has been indexed using 1,536-dimensional embeddings. End-to-end answers based on it and a complete live order flow still need to be verified; do not present them as passed until they are.
+4. **RAG and checkout.** A fictional demo document was indexed using 1,536-dimensional embeddings. On November 9, 2026, one Messenger question about delivery returned the relevant document through `knowledge.search` and sent the correct demo policy. Earlier attempts failed or produced irrelevant replies, so this single success does not establish reliability. A complete live order flow remains unverified.
 5. **Engineering evidence.** Show relevant local test results and, only when available, the current remote CI run. Explain why an ambiguous Messenger delivery is handed over instead of retried blindly.
 
 ## Before a recruiter call
