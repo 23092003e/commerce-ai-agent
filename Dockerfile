@@ -28,6 +28,7 @@ COPY packages/observability/package.json packages/observability/package.json
 COPY packages/queue/package.json packages/queue/package.json
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/assets apps/api/assets
 COPY --from=build /app/apps/admin/dist apps/admin/dist
 COPY --from=build /app/packages/config/dist packages/config/dist
 COPY --from=build /app/packages/db/dist packages/db/dist
