@@ -627,7 +627,10 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         await complete({
           agentRunId,
           outcome: 'handed_over',
-          latencyMs
+          latencyMs,
+          ...(result.diagnostic
+            ? { error: `grounding:${result.diagnostic}` }
+            : {})
         });
         return await finish();
       }

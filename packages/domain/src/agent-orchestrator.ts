@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { assembleAgentContext, type AgentContext } from './agent-context.js';
 import {
   AgentReplyDecisionSchema,
+  GroundingError,
   validateAndRenderGroundedReply,
   type AgentReplyDecision
 } from './grounded-reply.js';
@@ -88,6 +89,7 @@ export interface AgentOrchestrator {
     | {
         type: 'handover';
         reason: string;
+        diagnostic?: GroundingError['code'];
         toolSteps: number;
         trace: AgentTrace;
       }
@@ -379,10 +381,13 @@ export function createAgentOrchestrator(input: {
               toolSteps,
               trace: { toolCalls }
             };
-          } catch {
+          } catch (error) {
             return {
               type: 'handover',
               reason: 'grounding_failed',
+              ...(error instanceof GroundingError
+                ? { diagnostic: error.code }
+                : {}),
               toolSteps,
               trace: { toolCalls }
             };

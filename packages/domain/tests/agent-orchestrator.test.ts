@@ -10,6 +10,23 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('reports a safe grounding diagnostic without retaining the rejected text', async () => {
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([
+        { type: 'reply', intro: 'private invented text', facts: [] }
+      ]),
+      tools: []
+    });
+    const result = await agent.run({
+      customerMessage: 'Đơn hàng demo có giao hàng thật không?'
+    });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'grounding_failed',
+      diagnostic: 'unsafe_intro'
+    });
+    expect(JSON.stringify(result)).not.toContain('private invented text');
+  });
   it('answers a named product price and stock question using matching verified variants', async () => {
     const productId = '11111111-1111-4111-8111-111111111111';
     const variantId = '22222222-2222-4222-8222-222222222222';

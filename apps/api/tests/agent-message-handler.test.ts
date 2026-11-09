@@ -37,6 +37,7 @@ function createHarness(
 ) {
   const channel = new FakeMessagingChannel();
   const completions: string[] = [];
+  const diagnostics: Array<string | undefined> = [];
   const handovers: string[] = [];
   const handler = new AgentMessageHandler({
     provider: createScriptedDecisionProvider(decisions),
@@ -51,6 +52,7 @@ function createHarness(
       async recordToolCall() {},
       async complete(input) {
         completions.push(input.outcome);
+        diagnostics.push(input.error);
       }
     },
     handovers: {
@@ -71,7 +73,7 @@ function createHarness(
       : { checkoutOrderConfirmation: options.checkoutOrderConfirmation }),
     ...(options.metrics === undefined ? {} : { metrics: options.metrics })
   });
-  return { channel, completions, handovers, handler };
+  return { channel, completions, handovers, handler, diagnostics };
 }
 
 const message = {
@@ -273,7 +275,7 @@ describe('AgentMessageHandler', () => {
     ]);
   });
   it('acknowledges a rejected ungrounded reply before handing over', async () => {
-    const { handler, handovers, channel } = createHarness([
+    const { handler, handovers, channel, diagnostics } = createHarness([
       { type: 'reply', intro: 'Invented answer', facts: [] }
     ]);
     expect(
@@ -283,6 +285,7 @@ describe('AgentMessageHandler', () => {
       })
     ).toMatchObject({ outcome: 'handed_over' });
     expect(handovers).toEqual(['grounding_failed']);
+    expect(diagnostics).toContain('grounding:unsafe_intro');
     expect(channel.getCapturedMessages()).toMatchObject([
       {
         text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
