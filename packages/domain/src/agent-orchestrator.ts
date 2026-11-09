@@ -406,6 +406,29 @@ export function createAgentOrchestrator(input: {
               trace: { toolCalls }
             };
           } catch (error) {
+            if (
+              error instanceof GroundingError &&
+              (error.code === 'unsafe_intro' ||
+                error.code === 'unsafe_question') &&
+              decision.facts.length > 0
+            ) {
+              try {
+                const rendered = validateAndRenderGroundedReply({
+                  decision: { type: 'reply', facts: decision.facts },
+                  ledger: toolCalls,
+                  locale: 'vi-VN'
+                });
+                return {
+                  type: 'reply',
+                  ...rendered,
+                  factRefs: decision.facts,
+                  toolSteps,
+                  trace: { toolCalls }
+                };
+              } catch {
+                // An unverified reference must still result in a handover.
+              }
+            }
             return {
               type: 'handover',
               reason: 'grounding_failed',

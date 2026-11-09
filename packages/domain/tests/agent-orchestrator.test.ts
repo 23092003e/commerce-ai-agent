@@ -11,6 +11,81 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('recovers verified knowledge facts when the model adds an unsafe introduction', async () => {
+    const chunkId = '11111111-1111-4111-8111-111111111111';
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'giao hàng demo' }
+      },
+      {
+        type: 'reply',
+        intro: 'Câu tự tạo không được phép',
+        facts: [{ type: 'knowledge', chunkIds: [chunkId] }]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return {
+          type: 'evidence',
+          chunks: [
+            {
+              chunkId,
+              documentId: chunkId,
+              content: 'Đơn hàng demo không được giao hàng thật.'
+            }
+          ]
+        };
+      }
+    };
+    const result = await createAgentOrchestrator({
+      provider,
+      tools: [tool]
+    }).run({ customerMessage: 'Đơn hàng demo có giao hàng thật không?' });
+    expect(result).toMatchObject({
+      type: 'reply',
+      text: 'Đơn hàng demo không được giao hàng thật.',
+      evidenceChunkIds: [chunkId]
+    });
+  });
+  it('never recovers an unsafe introduction with an unverified knowledge reference', async () => {
+    const chunkId = '11111111-1111-4111-8111-111111111111';
+    const otherId = '22222222-2222-4222-8222-222222222222';
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'giao hàng demo' }
+      },
+      {
+        type: 'reply',
+        intro: 'Câu tự tạo không được phép',
+        facts: [{ type: 'knowledge', chunkIds: [otherId] }]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return {
+          type: 'evidence',
+          chunks: [
+            {
+              chunkId,
+              documentId: chunkId,
+              content: 'Đơn hàng demo không được giao hàng thật.'
+            }
+          ]
+        };
+      }
+    };
+    expect(
+      await createAgentOrchestrator({ provider, tools: [tool] }).run({
+        customerMessage: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ type: 'handover', reason: 'grounding_failed' });
+  });
   it('retries one malformed decision before executing a valid response', async () => {
     let calls = 0;
     const agent = createAgentOrchestrator({
