@@ -422,6 +422,24 @@ describe('AgentMessageHandler', () => {
     expect(handovers).toEqual([]);
   });
 
+  it('does not answer a shipping policy question with a product discovery prompt', async () => {
+    const { handler, channel, handovers } = createHarness([
+      { type: 'handover', reason: 'need to search policy first' }
+    ]);
+    expect(
+      await handler.handle({
+        ...message,
+        text: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['need to search policy first']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
+
   it('does not send when conversation control belongs to a human', async () => {
     const { handler, channel, completions, handovers } = createHarness([
       { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }

@@ -594,9 +594,14 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         return await finish();
       }
       if (result.type === 'handover') {
+        const recoverableGreeting =
+          RECOVERABLE_MODEL_HANDOVER.test(result.reason) &&
+          /^(?:xin chào|chào|hello|hi)[\s!.]*$/iu.test(message.text.trim());
         if (
           (result.reason === 'invalid_provider_decision' ||
-            result.reason === 'grounding_failed') &&
+            result.reason === 'grounding_failed' ||
+            (RECOVERABLE_MODEL_HANDOVER.test(result.reason) &&
+              !recoverableGreeting)) &&
           canSendAutomatedReply(message.timestamp)
         ) {
           await this.sendPacedText({
@@ -604,7 +609,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
             text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
           });
         }
-        if (RECOVERABLE_MODEL_HANDOVER.test(result.reason)) {
+        if (recoverableGreeting) {
           const sent = await this.sendPacedText({
             ...message,
             recipientId: message.recipientId,
