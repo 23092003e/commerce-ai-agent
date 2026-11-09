@@ -151,9 +151,9 @@ describe('OpenAI decision provider', () => {
     expect(requestBody).toMatchObject({
       temperature: 0.2,
       max_output_tokens: 1_000,
-      reasoning: { enabled: false },
       text: { format: { type: 'json_schema', strict: true } }
     });
+    expect(requestBody).not.toHaveProperty('reasoning.enabled', false);
     expect(JSON.stringify(requestBody)).toContain('catalog.searchProducts');
   });
 });
