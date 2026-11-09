@@ -10,6 +10,8 @@ This project is a portfolio demonstration using **Monexis**, a fictional bakery.
 4. **RAG and checkout.** A fictional demo document was indexed using 1,536-dimensional embeddings. On November 9, 2026, one Messenger question about delivery returned the relevant document through `knowledge.search` and sent the correct demo policy. A later unrelated warranty question returned zero evidence and sent a handover notice. Earlier attempts failed or produced irrelevant replies, so these two successful paths do not establish general reliability. A complete live order flow remains unverified.
 5. **Engineering evidence.** Show relevant local test results and, only when available, the current remote CI run. Explain why an ambiguous Messenger delivery is handed over instead of retried blindly.
 
+The [live model evaluation](demo/live-evaluation-2026-11-09.md) records small synthetic samples and their limitations. It should not be used as an overall model quality score.
+
 ## Before a recruiter call
 
 - Check the public `/ready` endpoint and Admin login.

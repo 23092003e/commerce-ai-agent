@@ -35,6 +35,7 @@ The service receives Meta webhooks, saves and queues incoming events, and gives 
 
 ## Verified demo
 
+**Project showcase:** [agent.boywithlycoris.online](https://agent.boywithlycoris.online)  
 **Live service:** [fanpage-sales-agent.onrender.com](https://fanpage-sales-agent.onrender.com)  
 **Health:** [/health](https://fanpage-sales-agent.onrender.com/health) · **Dependencies:** [/ready](https://fanpage-sales-agent.onrender.com/ready)  
 **Operator console:** [/admin/](https://fanpage-sales-agent.onrender.com/admin/) — authentication required.

@@ -19,6 +19,7 @@ import {
   type AdminSessionOptions
 } from './services/admin-session.js';
 import { registerAdminAssets } from './services/admin-assets.js';
+import { registerShowcase } from './services/showcase.js';
 import { isAuthorizedAdmin } from './services/admin-auth.js';
 import type { WebhookIngestion } from './services/webhook-ingestion.js';
 
@@ -292,6 +293,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     }
   );
 
+  registerShowcase(app);
   app.get('/health', async () => ({ status: 'ok' }));
   let hasAdminSession: (cookieHeader: string | undefined) => boolean = () =>
     false;
