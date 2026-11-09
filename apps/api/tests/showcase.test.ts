@@ -12,6 +12,15 @@ describe('portfolio showcase', () => {
     expect(response.body).toContain('Monexis');
     expect(response.body).toContain('github.com/23092003e/commerce-ai-agent');
     expect(response.body).toContain('không giao hàng');
+    expect(response.body).toContain('/showcase/croissant.webp');
+    expect(response.body).toContain('Hội thoại');
+    const image = await app.inject({
+      method: 'GET',
+      url: '/showcase/croissant.webp'
+    });
+    expect(image.statusCode).toBe(200);
+    expect(image.headers['content-type']).toContain('image/webp');
+    expect(image.rawPayload.length).toBeGreaterThan(1000);
     await app.close();
   });
 });
