@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DecisionProviderError } from '../src/decision-provider-error.js';
 import {
   createAgentOrchestrator,
   createReadOnlyAgentTools,
@@ -10,6 +11,23 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('records a safe provider failure diagnostic', async () => {
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          throw new DecisionProviderError('http_429');
+        }
+      },
+      tools: []
+    });
+    expect(
+      await agent.run({ customerMessage: 'Cửa hàng có giao hàng không?' })
+    ).toMatchObject({
+      type: 'handover',
+      reason: 'invalid_provider_decision',
+      diagnostic: 'http_429'
+    });
+  });
   it('reports a safe grounding diagnostic without retaining the rejected text', async () => {
     const agent = createAgentOrchestrator({
       provider: createScriptedDecisionProvider([

@@ -1,6 +1,64 @@
 import { describe, expect, it } from 'vitest';
 import { createOpenAiDecisionProvider } from '../src/index.js';
 describe('OpenAI decision provider', () => {
+  it('classifies invalid response content without retaining it', async () => {
+    const provider = createOpenAiDecisionProvider({
+      apiKey: 'key',
+      model: 'test',
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            output: [
+              {
+                content: [{ type: 'output_text', text: 'private invalid json' }]
+              }
+            ]
+          };
+        }
+      })
+    });
+    const context = {
+      customerMessage: 'test',
+      controlMode: 'ai' as const,
+      productReferences: [],
+      recentMessages: [],
+      cart: null,
+      checkout: null
+    };
+    await expect(
+      provider.decide({ context, toolResults: [] })
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+  it('classifies provider HTTP failure without including response content or credentials', async () => {
+    const provider = createOpenAiDecisionProvider({
+      apiKey: 'private-key',
+      model: 'test',
+      fetch: async () => ({
+        ok: false,
+        status: 429,
+        async json() {
+          return { secret: 'private-body' };
+        }
+      })
+    });
+    const context = {
+      customerMessage: 'test',
+      controlMode: 'ai' as const,
+      productReferences: [],
+      recentMessages: [],
+      cart: null,
+      checkout: null
+    };
+    try {
+      await provider.decide({ context, toolResults: [] });
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'http_429' });
+      expect(JSON.stringify(error)).not.toContain('private');
+    }
+  });
   it('does not send OpenRouter reasoning settings to OpenAI', async () => {
     let body: unknown;
     const provider = createOpenAiDecisionProvider({

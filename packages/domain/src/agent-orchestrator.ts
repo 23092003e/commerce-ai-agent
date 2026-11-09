@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DecisionProviderError } from './decision-provider-error.js';
 import { assembleAgentContext, type AgentContext } from './agent-context.js';
 import {
   AgentReplyDecisionSchema,
@@ -89,7 +90,11 @@ export interface AgentOrchestrator {
     | {
         type: 'handover';
         reason: string;
-        diagnostic?: GroundingError['code'];
+        diagnostic?:
+          | GroundingError['code']
+          | DecisionProviderError['code']
+          | 'schema_invalid'
+          | 'provider_unknown';
         toolSteps: number;
         trace: AgentTrace;
       }
@@ -352,12 +357,18 @@ export function createAgentOrchestrator(input: {
             })
           );
           input.metrics?.increment('llm_calls_total', { status: 'success' });
-        } catch {
+        } catch (error) {
           input.metrics?.increment('llm_calls_total', { status: 'error' });
           input.metrics?.increment('llm_errors_total');
           return {
             type: 'handover',
             reason: 'invalid_provider_decision',
+            diagnostic:
+              error instanceof DecisionProviderError
+                ? error.code
+                : error instanceof z.ZodError
+                  ? 'schema_invalid'
+                  : 'provider_unknown',
             toolSteps,
             trace: { toolCalls }
           };

@@ -1,4 +1,5 @@
 import type { StructuredDecisionProvider } from './agent-orchestrator.js';
+import { DecisionProviderError } from './decision-provider-error.js';
 import { createSalesSystemPrompt } from './sales-prompts.js';
 
 interface FetchResponse {
@@ -134,9 +135,21 @@ export function createOpenAiDecisionProvider(input: {
             input: JSON.stringify({ context, toolResults })
           })
         });
-        if (!response.ok)
-          throw new Error(`OpenAI response failed: ${String(response.status)}`);
-        const parsed: unknown = JSON.parse(outputText(await response.json()));
+        if (!response.ok) {
+          const status =
+            Number.isInteger(response.status) &&
+            response.status >= 100 &&
+            response.status <= 599
+              ? response.status
+              : 500;
+          throw new DecisionProviderError(`http_${String(status)}`);
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(outputText(await response.json()));
+        } catch {
+          throw new DecisionProviderError('invalid_response');
+        }
         if (!parsed || typeof parsed !== 'object') return parsed;
         const decision: unknown =
           'decision' in parsed ? parsed.decision : parsed;
@@ -161,6 +174,11 @@ export function createOpenAiDecisionProvider(input: {
             )
           );
         return normalized;
+      } catch (error) {
+        if (error instanceof DecisionProviderError) throw error;
+        throw new DecisionProviderError(
+          controller.signal.aborted ? 'timeout' : 'network'
+        );
       } finally {
         clearTimeout(timeout);
       }

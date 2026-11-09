@@ -629,7 +629,9 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
           outcome: 'handed_over',
           latencyMs,
           ...(result.diagnostic
-            ? { error: `grounding:${result.diagnostic}` }
+            ? {
+                error: `${result.reason === 'grounding_failed' ? 'grounding' : 'provider'}:${result.diagnostic}`
+              }
             : {})
         });
         return await finish();
