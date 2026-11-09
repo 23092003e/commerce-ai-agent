@@ -146,9 +146,24 @@ export function createOpenAiDecisionProvider(input: {
         }
         let parsed: unknown;
         try {
-          parsed = JSON.parse(outputText(await response.json()));
-        } catch {
-          throw new DecisionProviderError('invalid_response');
+          const payload: unknown = await response.json();
+          if (
+            z
+              .object({
+                status: z.literal('incomplete'),
+                incomplete_details: z.object({
+                  reason: z.literal('max_output_tokens')
+                })
+              })
+              .safeParse(payload).success
+          )
+            throw new DecisionProviderError('output_limit');
+          parsed = JSON.parse(outputText(payload));
+        } catch (error) {
+          if (error instanceof DecisionProviderError) throw error;
+          throw new DecisionProviderError(
+            controller.signal.aborted ? 'timeout' : 'invalid_response'
+          );
         }
         if (!parsed || typeof parsed !== 'object') return parsed;
         const decision: unknown =

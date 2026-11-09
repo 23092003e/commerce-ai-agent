@@ -1,6 +1,75 @@
 import { describe, expect, it } from 'vitest';
 import { createOpenAiDecisionProvider } from '../src/index.js';
 describe('OpenAI decision provider', () => {
+  it('classifies an output exhausted by reasoning without retaining reasoning content', async () => {
+    const provider = createOpenAiDecisionProvider({
+      apiKey: 'key',
+      model: 'test',
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [
+              {
+                type: 'reasoning',
+                content: [{ type: 'reasoning_text', text: 'private text' }]
+              }
+            ]
+          };
+        }
+      })
+    });
+    const context = {
+      customerMessage: 'test',
+      controlMode: 'ai' as const,
+      productReferences: [],
+      recentMessages: [],
+      cart: null,
+      checkout: null
+    };
+    try {
+      await provider.decide({ context, toolResults: [] });
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'output_limit' });
+      expect(JSON.stringify(error)).not.toContain('private text');
+    }
+  });
+  it('reports a timeout when reading the response body is aborted', async () => {
+    const provider = createOpenAiDecisionProvider({
+      apiKey: 'key',
+      model: 'test',
+      timeoutMs: 10,
+      fetch: async (_url, request) => ({
+        ok: true,
+        status: 200,
+        async json() {
+          await new Promise<void>((_resolve, reject) => {
+            request.signal?.addEventListener(
+              'abort',
+              () => reject(new Error('aborted')),
+              { once: true }
+            );
+          });
+          return {};
+        }
+      })
+    });
+    const context = {
+      customerMessage: 'test',
+      controlMode: 'ai' as const,
+      productReferences: [],
+      recentMessages: [],
+      cart: null,
+      checkout: null
+    };
+    await expect(
+      provider.decide({ context, toolResults: [] })
+    ).rejects.toMatchObject({ code: 'timeout' });
+  });
   it('classifies invalid response content without retaining it', async () => {
     const provider = createOpenAiDecisionProvider({
       apiKey: 'key',

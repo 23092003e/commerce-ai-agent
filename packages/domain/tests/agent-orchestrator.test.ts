@@ -11,6 +11,23 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('retries a provider output limit once before accepting a valid decision', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls++;
+          if (calls === 1) throw new DecisionProviderError('output_limit');
+          return { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] };
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'reply'
+    });
+    expect(calls).toBe(2);
+  });
   it('refuses a fabricated knowledge reference when search has insufficient evidence', async () => {
     const provider = createScriptedDecisionProvider([
       {

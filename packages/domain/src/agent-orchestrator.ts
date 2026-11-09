@@ -359,7 +359,8 @@ export function createAgentOrchestrator(input: {
               !(error instanceof z.ZodError) &&
               !(
                 error instanceof DecisionProviderError &&
-                error.code === 'invalid_response'
+                (error.code === 'invalid_response' ||
+                  error.code === 'output_limit')
               )
             )
               throw error;
