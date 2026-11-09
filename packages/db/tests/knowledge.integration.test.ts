@@ -77,7 +77,10 @@ describe('Postgres knowledge RAG', () => {
       makeAgent('air conditioner warranty').run({
         customerMessage: 'Is the air conditioner under warranty?'
       })
-    ).resolves.toMatchObject({ type: 'handover', reason: 'grounding_failed' });
+    ).resolves.toMatchObject({
+      type: 'handover',
+      reason: 'knowledge_insufficient_evidence'
+    });
   });
   it('versions identical content across embedding models and filters incompatible keyword evidence', async () => {
     const marker = randomUUID();

@@ -478,7 +478,15 @@ export function createAgentOrchestrator(input: {
             input.metrics?.increment('rag_searches_total', {
               status: hasEvidence ? 'evidence' : 'insufficient_evidence'
             });
-            if (!hasEvidence) input.metrics?.increment('rag_no_evidence_total');
+            if (!hasEvidence) {
+              input.metrics?.increment('rag_no_evidence_total');
+              return {
+                type: 'handover',
+                reason: 'knowledge_insufficient_evidence',
+                toolSteps: toolCalls.length,
+                trace: { toolCalls }
+              };
+            }
           }
         } catch {
           input.metrics?.increment('tool_calls_total', {

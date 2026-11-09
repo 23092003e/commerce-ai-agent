@@ -33,6 +33,7 @@ function createHarness(
     metrics?: OperationalMetrics;
     outbound?: InMemoryOutboundMessageRepository;
     checkout?: CheckoutFlow;
+    knowledge?: KnowledgeService;
   } = {}
 ) {
   const channel = new FakeMessagingChannel();
@@ -42,7 +43,7 @@ function createHarness(
   const handler = new AgentMessageHandler({
     provider: createScriptedDecisionProvider(decisions),
     catalog: {} as CatalogService,
-    knowledge: {} as KnowledgeService,
+    knowledge: options.knowledge ?? ({} as KnowledgeService),
     cart: {} as CartService,
     checkout: options.checkout ?? ({} as CheckoutFlow),
     agentRuns: {
@@ -118,6 +119,32 @@ const prepared: PreparedCheckoutConfirmation = {
 };
 
 describe('AgentMessageHandler', () => {
+  it('notifies the customer before handing over when knowledge has no evidence', async () => {
+    const { handler, channel, handovers } = createHarness(
+      [
+        { type: 'tool', name: 'knowledge.search', input: { query: 'warranty' } }
+      ],
+      {
+        knowledge: {
+          async search() {
+            return { type: 'insufficient_evidence', chunks: [] };
+          },
+          async ingest() {
+            throw new Error('unexpected ingest');
+          }
+        }
+      }
+    );
+    expect(
+      await handler.handle({ ...message, text: 'What is the warranty policy?' })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['knowledge_insufficient_evidence']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
   it('records provider call metrics from the live handler orchestration', async () => {
     const names: string[] = [];
     const metrics: OperationalMetrics = {

@@ -362,7 +362,7 @@ export const goldenScenarios: CategorizedGoldenScenario[] = [
     ],
     calls: [call('knowledge.search', { query: 'international' })],
     outcome: 'handover',
-    reason: 'grounding_failed',
+    reason: 'knowledge_insufficient_evidence',
     failure: true
   }),
   scenario({
@@ -377,7 +377,7 @@ export const goldenScenarios: CategorizedGoldenScenario[] = [
     ],
     calls: [call('knowledge.search', { query: 'returns' })],
     outcome: 'handover',
-    reason: 'grounding_failed',
+    reason: 'knowledge_insufficient_evidence',
     failure: true
   }),
   scenario({

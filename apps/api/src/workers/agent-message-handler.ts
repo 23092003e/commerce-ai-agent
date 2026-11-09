@@ -600,6 +600,7 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         if (
           (result.reason === 'invalid_provider_decision' ||
             result.reason === 'grounding_failed' ||
+            result.reason === 'knowledge_insufficient_evidence' ||
             (RECOVERABLE_MODEL_HANDOVER.test(result.reason) &&
               !recoverableGreeting)) &&
           canSendAutomatedReply(message.timestamp)

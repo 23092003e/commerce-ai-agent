@@ -11,6 +11,39 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('hands over immediately when knowledge search returns no evidence', async () => {
+    let decisions = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          decisions++;
+          return {
+            type: 'tool',
+            name: 'knowledge.search',
+            input: { query: 'warranty' }
+          };
+        }
+      },
+      tools: [
+        {
+          name: 'knowledge.search',
+          async execute() {
+            return { type: 'insufficient_evidence', chunks: [] };
+          }
+        }
+      ]
+    });
+    const result = await agent.run({
+      customerMessage: 'What is the warranty policy?'
+    });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'knowledge_insufficient_evidence',
+      toolSteps: 1,
+      trace: { toolCalls: [{ name: 'knowledge.search', status: 'succeeded' }] }
+    });
+    expect(decisions).toBe(1);
+  });
   it('retries a provider output limit once before accepting a valid decision', async () => {
     let calls = 0;
     const agent = createAgentOrchestrator({
@@ -57,7 +90,7 @@ describe('agent orchestrator', () => {
     }).run({ customerMessage: 'Cửa hàng bảo hành máy lạnh bao lâu?' });
     expect(result).toMatchObject({
       type: 'handover',
-      reason: 'grounding_failed',
+      reason: 'knowledge_insufficient_evidence',
       trace: { toolCalls: [{ name: 'knowledge.search', status: 'succeeded' }] }
     });
   });
