@@ -11,6 +11,39 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('refuses a fabricated knowledge reference when search has insufficient evidence', async () => {
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'bảo hành máy lạnh' }
+      },
+      {
+        type: 'reply',
+        facts: [
+          {
+            type: 'knowledge',
+            chunkIds: ['11111111-1111-4111-8111-111111111111']
+          }
+        ]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return { type: 'insufficient_evidence', chunks: [] };
+      }
+    };
+    const result = await createAgentOrchestrator({
+      provider,
+      tools: [tool]
+    }).run({ customerMessage: 'Cửa hàng bảo hành máy lạnh bao lâu?' });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'grounding_failed',
+      trace: { toolCalls: [{ name: 'knowledge.search', status: 'succeeded' }] }
+    });
+  });
   it('recovers verified knowledge facts when the model adds an unsafe introduction', async () => {
     const chunkId = '11111111-1111-4111-8111-111111111111';
     const provider = createScriptedDecisionProvider([
