@@ -1,20 +1,20 @@
 # Recruiter demonstration
 
-This project is a portfolio demonstration using **Banh May Atelier**, a fictional bakery. Do not enter real customer data. A demo deployment is not a high-availability commercial service.
+This project is a portfolio demonstration using **Monexis**, a fictional bakery. Do not enter real customer data. A demo deployment is not a high-availability commercial service.
 
 ## Three-minute walkthrough
 
-1. **Architecture (20 seconds).** Show the README diagram: Messenger webhook → authenticated API → durable queue → bounded tool-using agent → catalog/checkout → outbound message. PostgreSQL is the source of truth; Redis handles work scheduling.
-2. **Product discovery (40 seconds).** Ask in Vietnamese for a birthday cake for six people. Show the catalog lookup in Admin Agent Runs. Verify recommendations and prices against the Products view.
-3. **Order flow (60 seconds).** Choose an available variant, add a quantity, then supply fictional recipient information. Read the prepared order summary before explicitly confirming. Show exactly one order in Admin. A replay should not create a second order.
-4. **Human control (30 seconds).** Request a person, show the handover and human mode, and send another message. The agent must remain silent. Resume AI through the authenticated Admin control.
-5. **Engineering evidence (30 seconds).** Show the current CI run, delivery failure tests, migration history, and release evidence. Explain the ambiguous-delivery tradeoff: avoid automatic duplicate sends and make follow-up visible to staff.
+1. **Architecture.** Show the README diagram and explain signed ingress, PostgreSQL persistence, the queue, catalog tools and operator control. Render's free queue is volatile; the application recovers persisted pending events while its worker is running.
+2. **Verified catalog flow.** Ask “Cửa hàng đang bán sản phẩm nào?” and show the three catalog-backed prices. Ask “Butter Croissant giá bao nhiêu, còn hàng không?” and compare both variants with the Admin Products view. These two exact paths have been tested through Messenger.
+3. **Human control.** Show the operator console and explain the AI, human and paused modes. Only demonstrate a handover live after verifying it in the current deployment.
+4. **RAG and checkout.** Explain that a fictional demo document has been indexed using 1,536-dimensional embeddings. End-to-end answers based on it and a complete live order flow still need to be verified; do not present them as passed until they are.
+5. **Engineering evidence.** Show relevant local test results and, only when available, the current remote CI run. Explain why an ambiguous Messenger delivery is handed over instead of retried blindly.
 
 ## Before a recruiter call
 
 - Check the public `/ready` endpoint and Admin login.
 - Use a dedicated Meta test account/Page permitted by the app's current access mode. Recruiters may not be permitted to message a development-mode app; demonstrate through screen sharing when necessary.
-- Keep the host machine awake, Docker running, API healthy, and tunnel service online.
+- Check Render's current deployment and its Free-plan limits. It can sleep and take time to wake; the worker is not continuous while the service sleeps.
 - Confirm demo inventory is available. Never reseed or reset a live database during a call.
 - Prepare a 2–3 minute recording showing the same flow in case the host, Meta or AI provider is unavailable.
 - Close terminals or dashboards containing credentials and personal messages.

@@ -594,6 +594,15 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         return await finish();
       }
       if (result.type === 'handover') {
+        if (
+          result.reason === 'invalid_provider_decision' &&
+          canSendAutomatedReply(message.timestamp)
+        ) {
+          await this.sendPacedText({
+            ...message,
+            text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+          });
+        }
         if (RECOVERABLE_MODEL_HANDOVER.test(result.reason)) {
           const sent = await this.sendPacedText({
             ...message,

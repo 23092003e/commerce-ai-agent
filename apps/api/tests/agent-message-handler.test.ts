@@ -260,6 +260,29 @@ describe('AgentMessageHandler', () => {
     expect(handovers).toEqual(['script_exhausted']);
     expect(channel.getCapturedMessages()).toEqual([]);
   });
+  it('acknowledges an invalid provider decision before handing the conversation to staff', async () => {
+    const { handler, handovers, channel } = createHarness([{}]);
+    expect(
+      await handler.handle({ ...message, text: 'Bánh này có phù hợp không?' })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['invalid_provider_decision']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
+  it('does not send the provider-error acknowledgement outside the messaging window', async () => {
+    const { handler, handovers, channel } = createHarness([{}]);
+    const result = await handler.handle({
+      ...message,
+      text: 'Bánh này có phù hợp không?',
+      timestamp: Date.now() - 25 * 60 * 60 * 1000
+    });
+    expect(result).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['messaging_window_expired']);
+    expect(channel.getCapturedMessages()).toEqual([]);
+  });
   it('retries a definitive rejection using persisted text without rerunning the provider', async () => {
     const { handler, channel, completions } = createHarness([
       { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
