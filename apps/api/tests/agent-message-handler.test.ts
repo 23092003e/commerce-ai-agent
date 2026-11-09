@@ -33,15 +33,17 @@ function createHarness(
     metrics?: OperationalMetrics;
     outbound?: InMemoryOutboundMessageRepository;
     checkout?: CheckoutFlow;
+    knowledge?: KnowledgeService;
   } = {}
 ) {
   const channel = new FakeMessagingChannel();
   const completions: string[] = [];
+  const diagnostics: Array<string | undefined> = [];
   const handovers: string[] = [];
   const handler = new AgentMessageHandler({
     provider: createScriptedDecisionProvider(decisions),
     catalog: {} as CatalogService,
-    knowledge: {} as KnowledgeService,
+    knowledge: options.knowledge ?? ({} as KnowledgeService),
     cart: {} as CartService,
     checkout: options.checkout ?? ({} as CheckoutFlow),
     agentRuns: {
@@ -51,6 +53,7 @@ function createHarness(
       async recordToolCall() {},
       async complete(input) {
         completions.push(input.outcome);
+        diagnostics.push(input.error);
       }
     },
     handovers: {
@@ -71,7 +74,7 @@ function createHarness(
       : { checkoutOrderConfirmation: options.checkoutOrderConfirmation }),
     ...(options.metrics === undefined ? {} : { metrics: options.metrics })
   });
-  return { channel, completions, handovers, handler };
+  return { channel, completions, handovers, handler, diagnostics };
 }
 
 const message = {
@@ -116,6 +119,32 @@ const prepared: PreparedCheckoutConfirmation = {
 };
 
 describe('AgentMessageHandler', () => {
+  it('notifies the customer before handing over when knowledge has no evidence', async () => {
+    const { handler, channel, handovers } = createHarness(
+      [
+        { type: 'tool', name: 'knowledge.search', input: { query: 'warranty' } }
+      ],
+      {
+        knowledge: {
+          async search() {
+            return { type: 'insufficient_evidence', chunks: [] };
+          },
+          async ingest() {
+            throw new Error('unexpected ingest');
+          }
+        }
+      }
+    );
+    expect(
+      await handler.handle({ ...message, text: 'What is the warranty policy?' })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['knowledge_insufficient_evidence']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
   it('records provider call metrics from the live handler orchestration', async () => {
     const names: string[] = [];
     const metrics: OperationalMetrics = {
@@ -260,6 +289,51 @@ describe('AgentMessageHandler', () => {
     expect(handovers).toEqual(['script_exhausted']);
     expect(channel.getCapturedMessages()).toEqual([]);
   });
+  it('acknowledges an invalid provider decision before handing the conversation to staff', async () => {
+    const { handler, handovers, channel, diagnostics } = createHarness([
+      {},
+      {}
+    ]);
+    expect(
+      await handler.handle({ ...message, text: 'Bánh này có phù hợp không?' })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['invalid_provider_decision']);
+    expect(diagnostics).toContain('provider:schema_invalid');
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
+  it('acknowledges a rejected ungrounded reply before handing over', async () => {
+    const { handler, handovers, channel, diagnostics } = createHarness([
+      { type: 'reply', intro: 'Invented answer', facts: [] }
+    ]);
+    expect(
+      await handler.handle({
+        ...message,
+        text: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['grounding_failed']);
+    expect(diagnostics).toContain('grounding:unsafe_intro');
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
+  it('does not send the provider-error acknowledgement outside the messaging window', async () => {
+    const { handler, handovers, channel } = createHarness([{}]);
+    const result = await handler.handle({
+      ...message,
+      text: 'Bánh này có phù hợp không?',
+      timestamp: Date.now() - 25 * 60 * 60 * 1000
+    });
+    expect(result).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['messaging_window_expired']);
+    expect(channel.getCapturedMessages()).toEqual([]);
+  });
   it('retries a definitive rejection using persisted text without rerunning the provider', async () => {
     const { handler, channel, completions } = createHarness([
       { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] }
@@ -373,6 +447,24 @@ describe('AgentMessageHandler', () => {
     expect(channel.getCapturedMessages()).toHaveLength(1);
     expect(completions).toEqual(['replied']);
     expect(handovers).toEqual([]);
+  });
+
+  it('does not answer a shipping policy question with a product discovery prompt', async () => {
+    const { handler, channel, handovers } = createHarness([
+      { type: 'handover', reason: 'need to search policy first' }
+    ]);
+    expect(
+      await handler.handle({
+        ...message,
+        text: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['need to search policy first']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
   });
 
   it('does not send when conversation control belongs to a human', async () => {

@@ -58,27 +58,39 @@ export const SAFE_REPLY_QUESTIONS = [
   'Anh/chị xác nhận thông tin đặt hàng giúp em nhé?',
   'Could you tell me which option you prefer?'
 ] as const;
+export class GroundingError extends Error {
+  constructor(
+    readonly code:
+      | 'invalid_decision'
+      | 'unsafe_intro'
+      | 'unsafe_question'
+      | 'missing_evidence'
+      | 'invalid_output'
+  ) {
+    super('grounding_failed');
+  }
+}
 export function validateAndRenderGroundedReply(input: {
   decision: unknown;
   ledger: AgentToolTrace[];
   locale: string;
 }): { text: string; evidenceChunkIds: string[] } {
   const parsed = AgentReplyDecisionSchema.safeParse(input.decision);
-  function fail(): never {
-    throw new Error('grounding_failed');
+  function fail(code: GroundingError['code'] = 'missing_evidence'): never {
+    throw new GroundingError(code);
   }
-  if (!parsed.success) return fail();
+  if (!parsed.success) return fail('invalid_decision');
   const decision = parsed.data;
   if (
     decision.intro &&
     !SAFE_REPLY_INTROS.some((text) => text === decision.intro)
   )
-    fail();
+    fail('unsafe_intro');
   if (
     decision.nextQuestion &&
     !SAFE_REPLY_QUESTIONS.some((text) => text === decision.nextQuestion)
   )
-    fail();
+    fail('unsafe_question');
   const evidence = input.ledger
     .filter((item) => item.status === 'succeeded')
     .flatMap((item) => item.evidence ?? []);
@@ -174,6 +186,6 @@ export function validateAndRenderGroundedReply(input: {
   }
   if (decision.nextQuestion) sentences.push(decision.nextQuestion);
   const text = sentences.join('\n');
-  if (!text || text.length > 10000) fail();
+  if (!text || text.length > 10000) fail('invalid_output');
   return { text, evidenceChunkIds: [...new Set(chunks)] };
 }

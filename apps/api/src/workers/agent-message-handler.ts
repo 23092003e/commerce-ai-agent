@@ -594,7 +594,23 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         return await finish();
       }
       if (result.type === 'handover') {
-        if (RECOVERABLE_MODEL_HANDOVER.test(result.reason)) {
+        const recoverableGreeting =
+          RECOVERABLE_MODEL_HANDOVER.test(result.reason) &&
+          /^(?:xin chào|chào|hello|hi)[\s!.]*$/iu.test(message.text.trim());
+        if (
+          (result.reason === 'invalid_provider_decision' ||
+            result.reason === 'grounding_failed' ||
+            result.reason === 'knowledge_insufficient_evidence' ||
+            (RECOVERABLE_MODEL_HANDOVER.test(result.reason) &&
+              !recoverableGreeting)) &&
+          canSendAutomatedReply(message.timestamp)
+        ) {
+          await this.sendPacedText({
+            ...message,
+            text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+          });
+        }
+        if (recoverableGreeting) {
           const sent = await this.sendPacedText({
             ...message,
             recipientId: message.recipientId,
@@ -617,7 +633,12 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
         await complete({
           agentRunId,
           outcome: 'handed_over',
-          latencyMs
+          latencyMs,
+          ...(result.diagnostic
+            ? {
+                error: `${result.reason === 'grounding_failed' ? 'grounding' : 'provider'}:${result.diagnostic}`
+              }
+            : {})
         });
         return await finish();
       }

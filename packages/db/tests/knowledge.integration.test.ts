@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   createDeterministicEmbeddingProvider,
+  createAgentOrchestrator,
+  createScriptedDecisionProvider,
   createKnowledgeService,
   type EmbeddingProvider
 } from '@fanpage/domain';
@@ -26,6 +28,60 @@ beforeAll(async () => {
 afterAll(async () => repository.close());
 
 describe('Postgres knowledge RAG', () => {
+  it('grounds an answer against PostgreSQL evidence and refuses an unrelated query', async () => {
+    const marker = randomUUID();
+    const scoped = createKnowledgeService(repository, {
+      dimensions: 8,
+      provider: 'test-rag',
+      model: `test-${marker}`,
+      async embed(text) {
+        return text.includes('air conditioner')
+          ? [0, 1, 0, 0, 0, 0, 0, 0]
+          : [1, 0, 0, 0, 0, 0, 0, 0];
+      }
+    });
+    const content = 'Demo orders are not delivered or paid.';
+    await scoped.ingest({
+      title: `Demo ${marker}`,
+      sourceKey: `test-${marker}`,
+      sourceType: 'faq',
+      content
+    });
+    const found = await scoped.search({ query: 'demo orders' });
+    expect(found.type).toBe('evidence');
+    if (found.type !== 'evidence' || !found.chunks[0])
+      throw new Error('Expected evidence');
+    const chunkId = found.chunks[0].chunkId;
+    const tool = {
+      name: 'knowledge.search' as const,
+      execute: (input: unknown) => scoped.search(input)
+    };
+    const makeAgent = (query: string) =>
+      createAgentOrchestrator({
+        tools: [tool],
+        provider: createScriptedDecisionProvider([
+          { type: 'tool', name: 'knowledge.search', input: { query } },
+          { type: 'reply', facts: [{ type: 'knowledge', chunkIds: [chunkId] }] }
+        ])
+      });
+    await expect(
+      makeAgent('demo orders').run({
+        customerMessage: 'Are demo orders delivered?'
+      })
+    ).resolves.toMatchObject({
+      type: 'reply',
+      text: content,
+      evidenceChunkIds: [chunkId]
+    });
+    await expect(
+      makeAgent('air conditioner warranty').run({
+        customerMessage: 'Is the air conditioner under warranty?'
+      })
+    ).resolves.toMatchObject({
+      type: 'handover',
+      reason: 'knowledge_insufficient_evidence'
+    });
+  });
   it('versions identical content across embedding models and filters incompatible keyword evidence', async () => {
     const marker = randomUUID();
     const input = {

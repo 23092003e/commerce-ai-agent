@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DecisionProviderError } from '../src/decision-provider-error.js';
 import {
   createAgentOrchestrator,
   createReadOnlyAgentTools,
@@ -10,6 +11,235 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('hands over immediately when knowledge search returns no evidence', async () => {
+    let decisions = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          decisions++;
+          return {
+            type: 'tool',
+            name: 'knowledge.search',
+            input: { query: 'warranty' }
+          };
+        }
+      },
+      tools: [
+        {
+          name: 'knowledge.search',
+          async execute() {
+            return { type: 'insufficient_evidence', chunks: [] };
+          }
+        }
+      ]
+    });
+    const result = await agent.run({
+      customerMessage: 'What is the warranty policy?'
+    });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'knowledge_insufficient_evidence',
+      toolSteps: 1,
+      trace: { toolCalls: [{ name: 'knowledge.search', status: 'succeeded' }] }
+    });
+    expect(decisions).toBe(1);
+  });
+  it('retries a provider output limit once before accepting a valid decision', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls++;
+          if (calls === 1) throw new DecisionProviderError('output_limit');
+          return { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] };
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'reply'
+    });
+    expect(calls).toBe(2);
+  });
+  it('refuses a fabricated knowledge reference when search has insufficient evidence', async () => {
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'bảo hành máy lạnh' }
+      },
+      {
+        type: 'reply',
+        facts: [
+          {
+            type: 'knowledge',
+            chunkIds: ['11111111-1111-4111-8111-111111111111']
+          }
+        ]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return { type: 'insufficient_evidence', chunks: [] };
+      }
+    };
+    const result = await createAgentOrchestrator({
+      provider,
+      tools: [tool]
+    }).run({ customerMessage: 'Cửa hàng bảo hành máy lạnh bao lâu?' });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'knowledge_insufficient_evidence',
+      trace: { toolCalls: [{ name: 'knowledge.search', status: 'succeeded' }] }
+    });
+  });
+  it('recovers verified knowledge facts when the model adds an unsafe introduction', async () => {
+    const chunkId = '11111111-1111-4111-8111-111111111111';
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'giao hàng demo' }
+      },
+      {
+        type: 'reply',
+        intro: 'Câu tự tạo không được phép',
+        facts: [{ type: 'knowledge', chunkIds: [chunkId] }]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return {
+          type: 'evidence',
+          chunks: [
+            {
+              chunkId,
+              documentId: chunkId,
+              content: 'Đơn hàng demo không được giao hàng thật.'
+            }
+          ]
+        };
+      }
+    };
+    const result = await createAgentOrchestrator({
+      provider,
+      tools: [tool]
+    }).run({ customerMessage: 'Đơn hàng demo có giao hàng thật không?' });
+    expect(result).toMatchObject({
+      type: 'reply',
+      text: 'Đơn hàng demo không được giao hàng thật.',
+      evidenceChunkIds: [chunkId]
+    });
+  });
+  it('never recovers an unsafe introduction with an unverified knowledge reference', async () => {
+    const chunkId = '11111111-1111-4111-8111-111111111111';
+    const otherId = '22222222-2222-4222-8222-222222222222';
+    const provider = createScriptedDecisionProvider([
+      {
+        type: 'tool',
+        name: 'knowledge.search',
+        input: { query: 'giao hàng demo' }
+      },
+      {
+        type: 'reply',
+        intro: 'Câu tự tạo không được phép',
+        facts: [{ type: 'knowledge', chunkIds: [otherId] }]
+      }
+    ]);
+    const tool: AgentTool = {
+      name: 'knowledge.search',
+      async execute() {
+        return {
+          type: 'evidence',
+          chunks: [
+            {
+              chunkId,
+              documentId: chunkId,
+              content: 'Đơn hàng demo không được giao hàng thật.'
+            }
+          ]
+        };
+      }
+    };
+    expect(
+      await createAgentOrchestrator({ provider, tools: [tool] }).run({
+        customerMessage: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ type: 'handover', reason: 'grounding_failed' });
+  });
+  it('retries one malformed decision before executing a valid response', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls += 1;
+          return calls === 1
+            ? {}
+            : { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] };
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'reply',
+      text: 'Dạ em chào anh/chị.'
+    });
+    expect(calls).toBe(2);
+  });
+  it('stops after two malformed decisions without executing tools', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls += 1;
+          return {};
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'handover',
+      reason: 'invalid_provider_decision',
+      diagnostic: 'schema_invalid'
+    });
+    expect(calls).toBe(2);
+  });
+  it('records a safe provider failure diagnostic', async () => {
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          throw new DecisionProviderError('http_429');
+        }
+      },
+      tools: []
+    });
+    expect(
+      await agent.run({ customerMessage: 'Cửa hàng có giao hàng không?' })
+    ).toMatchObject({
+      type: 'handover',
+      reason: 'invalid_provider_decision',
+      diagnostic: 'http_429'
+    });
+  });
+  it('reports a safe grounding diagnostic without retaining the rejected text', async () => {
+    const agent = createAgentOrchestrator({
+      provider: createScriptedDecisionProvider([
+        { type: 'reply', intro: 'private invented text', facts: [] }
+      ]),
+      tools: []
+    });
+    const result = await agent.run({
+      customerMessage: 'Đơn hàng demo có giao hàng thật không?'
+    });
+    expect(result).toMatchObject({
+      type: 'handover',
+      reason: 'grounding_failed',
+      diagnostic: 'unsafe_intro'
+    });
+    expect(JSON.stringify(result)).not.toContain('private invented text');
+  });
   it('answers a named product price and stock question using matching verified variants', async () => {
     const productId = '11111111-1111-4111-8111-111111111111';
     const variantId = '22222222-2222-4222-8222-222222222222';

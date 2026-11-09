@@ -5,6 +5,22 @@ const productId = '11111111-1111-4111-8111-111111111111';
 const variantId = '22222222-2222-4222-8222-222222222222';
 const chunkId = '33333333-3333-4333-8333-333333333333';
 describe('grounded replies', () => {
+  it('classifies an unsafe introduction without including model text in the diagnostic', () => {
+    try {
+      validateAndRenderGroundedReply({
+        decision: { type: 'reply', intro: 'private invented text', facts: [] },
+        ledger: [],
+        locale: 'vi-VN'
+      });
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: 'grounding_failed',
+        code: 'unsafe_intro'
+      });
+      expect(JSON.stringify(error)).not.toContain('private invented text');
+    }
+  });
   it('renders authoritative prices and policy excerpts and retains safe references', () => {
     const ledger = [
       projectToolEvidence(

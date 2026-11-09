@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { DecisionProviderError } from './decision-provider-error.js';
 import { assembleAgentContext, type AgentContext } from './agent-context.js';
 import {
   AgentReplyDecisionSchema,
+  GroundingError,
   validateAndRenderGroundedReply,
   type AgentReplyDecision
 } from './grounded-reply.js';
@@ -88,6 +90,11 @@ export interface AgentOrchestrator {
     | {
         type: 'handover';
         reason: string;
+        diagnostic?:
+          | GroundingError['code']
+          | DecisionProviderError['code']
+          | 'schema_invalid'
+          | 'provider_unknown';
         toolSteps: number;
         trace: AgentTrace;
       }
@@ -343,19 +350,39 @@ export function createAgentOrchestrator(input: {
         let decision: StructuredDecision;
         const providerStartedAt = performance.now();
         try {
-          decision = DecisionSchema.parse(
-            await input.provider.decide({
-              context,
-              toolResults
-            })
-          );
+          try {
+            decision = DecisionSchema.parse(
+              await input.provider.decide({ context, toolResults })
+            );
+          } catch (error) {
+            if (
+              !(error instanceof z.ZodError) &&
+              !(
+                error instanceof DecisionProviderError &&
+                (error.code === 'invalid_response' ||
+                  error.code === 'output_limit')
+              )
+            )
+              throw error;
+            input.metrics?.increment('llm_calls_total', { status: 'error' });
+            input.metrics?.increment('llm_errors_total');
+            decision = DecisionSchema.parse(
+              await input.provider.decide({ context, toolResults })
+            );
+          }
           input.metrics?.increment('llm_calls_total', { status: 'success' });
-        } catch {
+        } catch (error) {
           input.metrics?.increment('llm_calls_total', { status: 'error' });
           input.metrics?.increment('llm_errors_total');
           return {
             type: 'handover',
             reason: 'invalid_provider_decision',
+            diagnostic:
+              error instanceof DecisionProviderError
+                ? error.code
+                : error instanceof z.ZodError
+                  ? 'schema_invalid'
+                  : 'provider_unknown',
             toolSteps,
             trace: { toolCalls }
           };
@@ -379,10 +406,36 @@ export function createAgentOrchestrator(input: {
               toolSteps,
               trace: { toolCalls }
             };
-          } catch {
+          } catch (error) {
+            if (
+              error instanceof GroundingError &&
+              (error.code === 'unsafe_intro' ||
+                error.code === 'unsafe_question') &&
+              decision.facts.length > 0
+            ) {
+              try {
+                const rendered = validateAndRenderGroundedReply({
+                  decision: { type: 'reply', facts: decision.facts },
+                  ledger: toolCalls,
+                  locale: 'vi-VN'
+                });
+                return {
+                  type: 'reply',
+                  ...rendered,
+                  factRefs: decision.facts,
+                  toolSteps,
+                  trace: { toolCalls }
+                };
+              } catch {
+                // An unverified reference must still result in a handover.
+              }
+            }
             return {
               type: 'handover',
               reason: 'grounding_failed',
+              ...(error instanceof GroundingError
+                ? { diagnostic: error.code }
+                : {}),
               toolSteps,
               trace: { toolCalls }
             };
@@ -425,7 +478,15 @@ export function createAgentOrchestrator(input: {
             input.metrics?.increment('rag_searches_total', {
               status: hasEvidence ? 'evidence' : 'insufficient_evidence'
             });
-            if (!hasEvidence) input.metrics?.increment('rag_no_evidence_total');
+            if (!hasEvidence) {
+              input.metrics?.increment('rag_no_evidence_total');
+              return {
+                type: 'handover',
+                reason: 'knowledge_insufficient_evidence',
+                toolSteps: toolCalls.length,
+                trace: { toolCalls }
+              };
+            }
           }
         } catch {
           input.metrics?.increment('tool_calls_total', {
