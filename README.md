@@ -45,8 +45,9 @@ The service has been deployed on Render Free with Neon PostgreSQL. In a controll
 2. Listed three bakery products with prices matching the database.
 3. Answered a specific Butter Croissant price-and-stock question using product and inventory lookups for both variants.
 4. Retrieved the fictional demo-order policy through `knowledge.search` and sent a grounded answer to one delivery question.
+5. Searched for an unrelated warranty question, found no supporting document, and sent a handover notice without inventing a policy.
 
-These checks do **not** establish reliable RAG for every question, the complete checkout flow, or unrestricted public Messenger access. Other AI requests have failed or produced irrelevant responses, and a later unrelated question failed at the AI provider before retrieval. Page access can be limited by the Meta app's development mode and permissions. Product names, prices and inventory are fictional.
+These checks do **not** establish reliable RAG for every question, the complete checkout flow, or unrestricted public Messenger access. Other AI requests have failed or produced irrelevant responses. Page access can be limited by the Meta app's development mode and permissions. Product names, prices and inventory are fictional.
 
 > Render Free can sleep after inactivity; the first request may take time to wake it. This is a portfolio demonstration, not an always-on production service.
 
