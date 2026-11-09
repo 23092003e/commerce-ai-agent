@@ -595,7 +595,8 @@ export class AgentMessageHandler implements PersistedInboundMessageHandler {
       }
       if (result.type === 'handover') {
         if (
-          result.reason === 'invalid_provider_decision' &&
+          (result.reason === 'invalid_provider_decision' ||
+            result.reason === 'grounding_failed') &&
           canSendAutomatedReply(message.timestamp)
         ) {
           await this.sendPacedText({

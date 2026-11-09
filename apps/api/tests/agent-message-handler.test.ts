@@ -272,6 +272,23 @@ describe('AgentMessageHandler', () => {
       }
     ]);
   });
+  it('acknowledges a rejected ungrounded reply before handing over', async () => {
+    const { handler, handovers, channel } = createHarness([
+      { type: 'reply', intro: 'Invented answer', facts: [] }
+    ]);
+    expect(
+      await handler.handle({
+        ...message,
+        text: 'Đơn hàng demo có giao hàng thật không?'
+      })
+    ).toMatchObject({ outcome: 'handed_over' });
+    expect(handovers).toEqual(['grounding_failed']);
+    expect(channel.getCapturedMessages()).toMatchObject([
+      {
+        text: 'Dạ em chưa kiểm tra được thông tin lúc này. Anh/chị vui lòng đợi nhân viên hỗ trợ ạ.'
+      }
+    ]);
+  });
   it('does not send the provider-error acknowledgement outside the messaging window', async () => {
     const { handler, handovers, channel } = createHarness([{}]);
     const result = await handler.handle({
