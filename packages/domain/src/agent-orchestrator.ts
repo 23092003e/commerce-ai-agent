@@ -350,12 +350,25 @@ export function createAgentOrchestrator(input: {
         let decision: StructuredDecision;
         const providerStartedAt = performance.now();
         try {
-          decision = DecisionSchema.parse(
-            await input.provider.decide({
-              context,
-              toolResults
-            })
-          );
+          try {
+            decision = DecisionSchema.parse(
+              await input.provider.decide({ context, toolResults })
+            );
+          } catch (error) {
+            if (
+              !(error instanceof z.ZodError) &&
+              !(
+                error instanceof DecisionProviderError &&
+                error.code === 'invalid_response'
+              )
+            )
+              throw error;
+            input.metrics?.increment('llm_calls_total', { status: 'error' });
+            input.metrics?.increment('llm_errors_total');
+            decision = DecisionSchema.parse(
+              await input.provider.decide({ context, toolResults })
+            );
+          }
           input.metrics?.increment('llm_calls_total', { status: 'success' });
         } catch (error) {
           input.metrics?.increment('llm_calls_total', { status: 'error' });

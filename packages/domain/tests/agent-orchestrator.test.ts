@@ -11,6 +11,43 @@ import {
 } from '../src/index.js';
 
 describe('agent orchestrator', () => {
+  it('retries one malformed decision before executing a valid response', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls += 1;
+          return calls === 1
+            ? {}
+            : { type: 'reply', intro: 'Dạ em chào anh/chị.', facts: [] };
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'reply',
+      text: 'Dạ em chào anh/chị.'
+    });
+    expect(calls).toBe(2);
+  });
+  it('stops after two malformed decisions without executing tools', async () => {
+    let calls = 0;
+    const agent = createAgentOrchestrator({
+      provider: {
+        async decide() {
+          calls += 1;
+          return {};
+        }
+      },
+      tools: []
+    });
+    expect(await agent.run({ customerMessage: 'Xin chào' })).toMatchObject({
+      type: 'handover',
+      reason: 'invalid_provider_decision',
+      diagnostic: 'schema_invalid'
+    });
+    expect(calls).toBe(2);
+  });
   it('records a safe provider failure diagnostic', async () => {
     const agent = createAgentOrchestrator({
       provider: {

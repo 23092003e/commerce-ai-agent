@@ -263,7 +263,10 @@ describe('AgentMessageHandler', () => {
     expect(channel.getCapturedMessages()).toEqual([]);
   });
   it('acknowledges an invalid provider decision before handing the conversation to staff', async () => {
-    const { handler, handovers, channel, diagnostics } = createHarness([{}]);
+    const { handler, handovers, channel, diagnostics } = createHarness([
+      {},
+      {}
+    ]);
     expect(
       await handler.handle({ ...message, text: 'Bánh này có phù hợp không?' })
     ).toMatchObject({ outcome: 'handed_over' });
